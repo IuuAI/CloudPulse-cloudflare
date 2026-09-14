@@ -9,13 +9,13 @@ assets = { directory = "./dist" }
 # 1. 边缘 SQLite 数据库绑定 (D1)
 [[d1_databases]]
 binding = "DB"
-database_name = "cloudpulse-db"
-database_id = "YOUR_D1_DATABASE_ID_HERE"
+database_name = "cloudpulse-d1"
+database_id = "0d30d27f-01db-4c20-b23f-d6940677675c"
 
 # 2. 边缘高速缓存绑定 (KV)
 [[kv_namespaces]]
 binding = "CACHE"
-id = "YOUR_KV_NAMESPACE_ID_HERE"
+id = "1343621be8b64badb66b8ad1f35dea7a"
 
 # 3. 每分钟定时巡检探活与告警 Cron Trigger
 [triggers]
