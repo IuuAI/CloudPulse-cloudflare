@@ -142,7 +142,16 @@ export async function saveTelegramConfig(config: Partial<TelegramConfig>): Promi
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
-  if (!res.ok) throw new Error('Failed to update telegram config');
+  if (!res.ok) {
+    let errMsg = 'Failed to update telegram config';
+    try {
+      const errJson = await res.json();
+      if (errJson.error || errJson.message) {
+        errMsg = errJson.error || errJson.message;
+      }
+    } catch {}
+    throw new Error(errMsg);
+  }
   const data: any = await res.json();
   return data.config || data;
 }
