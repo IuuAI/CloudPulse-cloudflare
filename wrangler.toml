@@ -1,0 +1,22 @@
+name = "cloudpulse"
+main = "worker/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 挂载前端打包静态资产 (Cloudflare Workers Static Assets)
+assets = { directory = "./dist" }
+
+# 1. 边缘 SQLite 数据库绑定 (D1)
+[[d1_databases]]
+binding = "DB"
+database_name = "cloudpulse-db"
+database_id = "YOUR_D1_DATABASE_ID_HERE"
+
+# 2. 边缘高速缓存绑定 (KV)
+[[kv_namespaces]]
+binding = "CACHE"
+id = "YOUR_KV_NAMESPACE_ID_HERE"
+
+# 3. 每分钟定时巡检探活与告警 Cron Trigger
+[triggers]
+crons = ["* * * * *"]

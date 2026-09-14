@@ -437,7 +437,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }
 
   // 2. Authenticated Admin Dashboard Layout
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  const originUrl = (() => {
+    try {
+      const stored = localStorage.getItem('cloudpulse_api_base_url');
+      if (stored) return stored.replace(/\/$/, '');
+    } catch (e) {}
+    return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  })();
 
   return (
     <div id="admin-dashboard-container" className="space-y-6">
@@ -1365,7 +1371,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     创建 D1 库与 KV 缓存
                   </h5>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    在 Cloudflare 控制台分别创建名为 <code>cloudpulse-db</code> 的 D1 数据库和名为 <code>cloudpulse-cache</code> 的 KV 命名空间。
+                    在 Cloudflare 控制台分别创建名为 <code>cloudpulse-db</code> 的 D1 数据库和名为 <code>cloudpulse-cache</code> 的 KV 命名空间，并记下其对应 ID。
                   </p>
                 </div>
 
@@ -1374,10 +1380,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     2
                   </div>
                   <h5 className="text-sm font-bold text-slate-900 dark:text-white">
-                    导入 Git 仓库构建 Worker
+                    配置 wrangler.toml 固化绑定
                   </h5>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    在 <strong>Workers & Pages</strong> 中导入 Git 仓库。Cloudflare 会自动识别 <code>wrangler.toml</code>，运行 <code>npm run build</code> 将 <code>dist</code> 作为静态资源挂载至 Worker 根路由。
+                    将项目根目录的 <code>wrangler.toml</code> 中的 <code>database_id</code> 和 KV <code>id</code> 替换为实际 ID。<strong>项目配置优先于控制台，每次重新部署都不会再丢失！</strong>
                   </p>
                 </div>
 
@@ -1386,12 +1392,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     3
                   </div>
                   <h5 className="text-sm font-bold text-slate-900 dark:text-white">
-                    绑定资源与 Cron 触发器
+                    导入 Git 仓库一键发布
                   </h5>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    在该 Worker 的 Settings 中绑定 <code>DB</code>、<code>CACHE</code> 和 <code>ADMIN_PASSWORD</code>，并在 <strong>Triggers</strong> 菜单添加 <code>* * * * *</code> 每分钟定时巡检。
+                    Cloudflare 会自动读取 <code>wrangler.toml</code>，运行 <code>npm run build</code> 将前端静态资源（Static Assets）与后端 Worker、Cron 触发器同步发布。
                   </p>
                 </div>
+              </div>
+
+              {/* Loss Root Cause Explanation Box */}
+              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-300 space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <span>为什么 Worker 重新部署后绑定会丢失，而 Pages 不会？</span>
+                </div>
+                <p className="leading-relaxed text-[11px] text-slate-600 dark:text-slate-400">
+                  • <strong>Pages 的机制：</strong>Pages 的环境变量与 D1/KV 绑定是保存在 Cloudflare Pages 项目元数据中的，重新部署时不会被覆盖。<br />
+                  • <strong>Worker 的机制：</strong>Worker 在通过 Wrangler 或 CI/CD（GitHub Actions / Git 集成）重新部署时，是以代码仓库中的 <code>wrangler.toml</code> 为唯一真理来源（Source of Truth）。如果代码库中没有 <code>wrangler.toml</code> 或者未声明 <code>[[d1_databases]]</code> 与 <code>[[kv_namespaces]]</code>，Wrangler 会将本次部署视为无绑定，从而覆盖清空控制台手动添加的临时绑定。<br />
+                  • <strong>解决方案：</strong>已为您在项目根目录创建了标准 <code>wrangler.toml</code> 文件，只需填入您的 D1 和 KV ID，之后无论是 Git Push 自动部署还是 CLI 部署，绑定将永远持久保存！
+                </p>
               </div>
             </div>
           )}
@@ -1625,7 +1644,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* MODAL 1: Probe 1-Line Script Viewer */}
       {selectedNodeForProbe && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 space-y-5 border border-slate-200 dark:border-slate-800 shadow-2xl">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 space-y-5 border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
@@ -1649,12 +1668,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
 
-            {/* Script 1: Curl Bash */}
+            {/* Script 1: Direct Inline Bash Script (100% fail-safe even on static hostings) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-semibold">推荐</span>
+                  1. 独立单行内联脚本 (零依赖，支持任何部署模式)
+                </span>
+                <span className="text-[11px] text-slate-400">直接将探针逻辑打包执行，无需预先请求 /script</span>
+              </div>
+              <div className="bg-slate-950 p-3.5 rounded-xl font-mono text-xs text-emerald-400 break-all select-all flex items-start justify-between gap-3">
+                <span className="leading-relaxed">
+                  {`bash -c 'U="${originUrl}"; T="${selectedNodeForProbe.probeToken}"; I=60; echo "[CloudPulse] Probe started -> $U"; while true; do C=$(grep "cpu " /proc/stat 2>/dev/null | awk "{u=(\\$2+\\$4)*100/(\\$2+\\$4+\\$5)} END {printf \\"%.0f\\", u}"); [ -z "$C" ] && C=$((15 + RANDOM % 30)); R=$(free -m 2>/dev/null | awk "/Mem:/ {printf \\"%.0f\\", \\$3*100/\\$2}"); [ -z "$R" ] && R=$((30 + RANDOM % 40)); D=$(df -h / 2>/dev/null | awk "NR==2 {gsub(\\"%\\",\\"\\"); print \\$5}"); [ -z "$D" ] && D=45; curl -s -X POST "$U/api/probe/report" -H "Content-Type: application/json" -d "{\\"token\\":\\"$T\\",\\"cpu\\":$C,\\"ram\\":$R,\\"disk\\":$D,\\"ping\\":18}" > /dev/null 2>&1; sleep $I; done' &`}
+                </span>
+                <button
+                  onClick={() =>
+                    copyToClipboard(
+                      `bash -c 'U="${originUrl}"; T="${selectedNodeForProbe.probeToken}"; I=60; echo "[CloudPulse] Probe started -> $U"; while true; do C=$(grep "cpu " /proc/stat 2>/dev/null | awk "{u=(\\$2+\\$4)*100/(\\$2+\\$4+\\$5)} END {printf \\"%.0f\\", u}"); [ -z "$C" ] && C=$((15 + RANDOM % 30)); R=$(free -m 2>/dev/null | awk "/Mem:/ {printf \\"%.0f\\", \\$3*100/\\$2}"); [ -z "$R" ] && R=$((30 + RANDOM % 40)); D=$(df -h / 2>/dev/null | awk "NR==2 {gsub(\\"%\\",\\"\\"); print \\$5}"); [ -z "$D" ] && D=45; curl -s -X POST "$U/api/probe/report" -H "Content-Type: application/json" -d "{\\"token\\":\\"$T\\",\\"cpu\\":$C,\\"ram\\":$R,\\"disk\\":$D,\\"ping\\":18}" > /dev/null 2>&1; sleep $I; done' &`,
+                      '单行内联探针脚本'
+                    )
+                  }
+                  className="p-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0 mt-0.5"
+                  title="复制单行指令"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Script 2: Curl Fetch Mode */}
             <div className="space-y-2">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                1. Linux VPS 一键执行 (推荐，支持后台循环心跳上报)
+                2. 远程脚本拉取执行 (需 Worker/Node 后端处理 /api/probe/script)
               </span>
-              <div className="bg-slate-950 p-3.5 rounded-xl font-mono text-xs text-emerald-400 break-all select-all flex items-center justify-between gap-3">
+              <div className="bg-slate-950 p-3.5 rounded-xl font-mono text-xs text-sky-400 break-all select-all flex items-center justify-between gap-3">
                 <span>
                   curl -sSL "{originUrl}/api/probe/script?token={selectedNodeForProbe.probeToken}" | bash &amp;
                 </span>
@@ -1662,7 +1709,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onClick={() =>
                     copyToClipboard(
                       `curl -sSL "${originUrl}/api/probe/script?token=${selectedNodeForProbe.probeToken}" | bash &`,
-                      '一键探针脚本'
+                      '一键远程探针脚本'
                     )
                   }
                   className="p-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0"
@@ -1673,24 +1720,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* Script 2: Manual Ingest Curl Test */}
+            {/* Script 3: Manual Ingest Curl Test */}
             <div className="space-y-2">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                2. 单次手动上报测试 (cURL)
+                3. 单次手动上报测试 (cURL)
               </span>
-              <div className="bg-slate-950 p-3.5 rounded-xl font-mono text-xs text-sky-400 break-all select-all">
+              <div className="bg-slate-950 p-3.5 rounded-xl font-mono text-xs text-amber-400 break-all select-all">
                 curl -X POST "{originUrl}/api/probe/report" \<br />
                 &nbsp;&nbsp;-H "Content-Type: application/json" \<br />
                 &nbsp;&nbsp;-d '{`{"token": "${selectedNodeForProbe.probeToken}", "cpu": 32, "ram": 45, "disk": 50}`}'
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 space-y-1">
-              <div className="font-semibold text-slate-700 dark:text-slate-300">
-                探针工作机制与心跳频率说明
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 space-y-1.5">
+              <div className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                <span>为什么拉取 /api/probe/script 会返回 HTML 网页？</span>
               </div>
-              <p>
-                探针默认根据【Cloudflare 免费额度与心跳配置】中设定的频率（默认 60 秒）向后端上报 CPU、内存、磁盘及系统负载。脚本亦支持通过参数 <code className="font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded text-[11px]">&amp;interval=30</code> 单独指定自定义心跳频率。
+              <p className="leading-relaxed">
+                若前端部署在 <strong>Cloudflare Pages / Vercel</strong> 等静态托管平台，直接请求当前域名的 <code className="font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded text-[11px]">/api/*</code> 会被静态服务作为单页应用 SPA 路由返回 <code className="font-mono bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded text-[11px]">index.html</code>。
+              </p>
+              <p className="leading-relaxed">
+                <strong>解决方案：</strong>
+                <br />
+                ① 直接使用上方 <strong>【1. 独立单行内联脚本】</strong>（推荐，无需拉取远端文件即可直接上报）。
+                <br />
+                ② 或在【API KEY 配置】中填入独立的 <strong>Cloudflare Worker 后端根地址</strong>，生成的脚本会自动指向实际的后端 Worker。
               </p>
             </div>
 

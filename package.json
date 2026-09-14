@@ -5,14 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "esbuild worker/index.ts --bundle --format=esm --target=es2022 --platform=neutral --outfile=dist/worker.js",
+    "build": "vite build && esbuild worker/index.ts --bundle --format=esm --target=es2022 --platform=neutral --outfile=dist/worker.js && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "build:full": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild worker/index.ts --bundle --format=esm --platform=neutral --outfile=dist/worker.js && cp dist/worker.js dist/_worker.js",
     "build:frontend": "vite build",
     "build:worker": "esbuild worker/index.ts --bundle --format=esm --target=es2022 --platform=neutral --outfile=dist/worker.js",
-    "deploy:worker": "npm run build && npx wrangler deploy dist/worker.js --compatibility-date 2025-01-01 --compatibility-flags nodejs_compat --keep-vars",
-    "start": "node dist/server.cjs",
-    "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy --config wrangler.toml",
+    "deploy:worker": "npm run build && wrangler deploy --config wrangler.toml",
     "deploy:pages": "npm run build && wrangler pages deploy dist",
     "clean": "rm -rf dist server.cjs",
     "lint": "tsc --noEmit"
