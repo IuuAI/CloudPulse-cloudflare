@@ -56,7 +56,7 @@ export const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 font-mono mt-0.5">
-                IP: {node.ip} • 上次心跳: {new Date(node.lastHeartbeat).toLocaleTimeString()}
+                上次心跳: {new Date(node.lastHeartbeat).toLocaleTimeString()}
               </p>
             </div>
           </div>

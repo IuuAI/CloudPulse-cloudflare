@@ -691,9 +691,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {node.name}
                       </h4>
                       <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5 font-mono">
-                        <span>{node.ip}</span>
-                        <span>•</span>
                         <span>{node.region}</span>
+                        {node.tags && node.tags.length > 0 && (
+                          <>
+                            <span>•</span>
+                            <span>{node.tags.slice(0, 2).join(', ')}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -885,30 +889,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {srv.url || '-'}
                       </td>
 
-                      <td className="p-3.5 text-right space-x-1">
-                        <button
-                          onClick={() => {
-                            setEditingService(srv);
-                            setServiceForm({
-                              name: srv.name,
-                              category: srv.category,
-                              url: srv.url,
-                              status: srv.status,
-                              latency: srv.latency,
-                              description: srv.description,
-                            });
-                            setIsServiceModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                        >
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => handleDeleteService(srv.id, srv.name)}
-                          className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                        >
-                          删除
-                        </button>
+                      <td className="p-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingService(srv);
+                              setServiceForm({
+                                name: srv.name,
+                                category: srv.category,
+                                url: srv.url,
+                                status: srv.status,
+                                latency: srv.latency,
+                                description: srv.description,
+                              });
+                              setIsServiceModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs transition-colors"
+                            title="编辑微服务信息"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteService(srv.id, srv.name)}
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-xs transition-colors"
+                            title="删除微服务"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

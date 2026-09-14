@@ -120,7 +120,7 @@ export const NodeList: React.FC<NodeListProps> = ({
             <input
               id="node-search-input"
               type="text"
-              placeholder="搜索节点名称 / IP / 标签..."
+              placeholder="搜索节点名称 / 区域 / 标签..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500 w-44 sm:w-56"
@@ -195,9 +195,6 @@ export const NodeList: React.FC<NodeListProps> = ({
                     </span>
                     <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                       {node.region}
-                    </span>
-                    <span className="text-xs font-mono text-slate-400">
-                      {node.ip}
                     </span>
                   </div>
 
