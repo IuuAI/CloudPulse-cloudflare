@@ -1,0 +1,348 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+  }
+
+  code, pre, kbd, samp {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+}
+
+/* ==========================================================================
+   1. 明亮模式 (Light Mode - 白色为主)
+   ========================================================================== */
+html.light,
+html:not(.dark):not(.cyberpunk):not(.tech-blue):not(.matrix) {
+  color-scheme: light;
+}
+
+html.light body,
+html:not(.dark):not(.cyberpunk):not(.tech-blue):not(.matrix) body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+/* ==========================================================================
+   2. 暗黑模式 (Dark Mode - 黑色为主)
+   ========================================================================== */
+html.dark:not(.cyberpunk):not(.tech-blue):not(.matrix) {
+  color-scheme: dark;
+}
+
+html.dark:not(.cyberpunk):not(.tech-blue):not(.matrix) body {
+  background-color: #05070e;
+  color: #f1f5f9;
+}
+
+/* ==========================================================================
+   3. 赛博朋克 (Cyberpunk - 紫色为主，线条带光晕效果)
+   ========================================================================== */
+html.cyberpunk {
+  color-scheme: dark;
+  background-color: #070210;
+  color: #f5f3ff;
+}
+
+html.cyberpunk body {
+  background-color: #070210;
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(192, 38, 211, 0.15), transparent 70%),
+    radial-gradient(circle at 100% 100%, rgba(147, 51, 234, 0.08), transparent 50%);
+  color: #f5f3ff;
+}
+
+html.cyberpunk .bg-white,
+html.cyberpunk .bg-slate-900 {
+  background-color: #0e041f !important;
+  border-color: rgba(217, 70, 239, 0.25) !important;
+  box-shadow: 0 0 15px rgba(217, 70, 239, 0.08) !important;
+}
+
+html.cyberpunk .bg-slate-50,
+html.cyberpunk .bg-slate-800,
+html.cyberpunk .bg-slate-800\/80,
+html.cyberpunk .bg-slate-800\/60 {
+  background-color: #170733 !important;
+  border-color: rgba(217, 70, 239, 0.3) !important;
+}
+
+html.cyberpunk .border-slate-200,
+html.cyberpunk .border-slate-200\/80,
+html.cyberpunk .border-slate-700,
+html.cyberpunk .border-slate-800 {
+  border-color: rgba(217, 70, 239, 0.28) !important;
+}
+
+/* Cyberpunk Glow Lines & Borders */
+html.cyberpunk .border-t,
+html.cyberpunk .border-b,
+html.cyberpunk .border-l,
+html.cyberpunk .border-r,
+html.cyberpunk [class*="border"] {
+  border-color: rgba(217, 70, 239, 0.25);
+}
+
+html.cyberpunk .hover\:border-sky-500:hover,
+html.cyberpunk .hover\:border-slate-300:hover {
+  border-color: #d946ef !important;
+  box-shadow: 0 0 12px rgba(217, 70, 239, 0.45) !important;
+}
+
+html.cyberpunk .text-sky-600,
+html.cyberpunk .text-sky-500,
+html.cyberpunk .text-sky-400 {
+  color: #f0abfc !important;
+  text-shadow: 0 0 8px rgba(217, 70, 239, 0.4);
+}
+
+html.cyberpunk .bg-sky-600,
+html.cyberpunk .bg-sky-500 {
+  background-color: #c026d3 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(192, 38, 211, 0.55) !important;
+}
+
+html.cyberpunk .bg-sky-50,
+html.cyberpunk .bg-sky-500\/10,
+html.cyberpunk .bg-sky-950\/40 {
+  background-color: rgba(192, 38, 211, 0.12) !important;
+  border-color: rgba(217, 70, 239, 0.35) !important;
+}
+
+html.cyberpunk .focus\:ring-sky-500:focus {
+  --tw-ring-color: #d946ef !important;
+  box-shadow: 0 0 14px rgba(217, 70, 239, 0.5) !important;
+}
+
+/* ==========================================================================
+   4. 蓝色妖姬 (Tech Blue / Blue Enchantress - 蓝色为主，线条带光晕效果)
+   ========================================================================== */
+html.tech-blue {
+  color-scheme: dark;
+  background-color: #020817;
+  color: #f0f9ff;
+}
+
+html.tech-blue body {
+  background-color: #020817;
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(14, 165, 233, 0.18), transparent 70%),
+    radial-gradient(circle at 10% 100%, rgba(2, 132, 199, 0.1), transparent 50%);
+  color: #f0f9ff;
+}
+
+html.tech-blue .bg-white,
+html.tech-blue .bg-slate-900 {
+  background-color: #06122c !important;
+  border-color: rgba(56, 189, 248, 0.28) !important;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.1) !important;
+}
+
+html.tech-blue .bg-slate-50,
+html.tech-blue .bg-slate-800,
+html.tech-blue .bg-slate-800\/80,
+html.tech-blue .bg-slate-800\/60 {
+  background-color: #0c1e45 !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+
+html.tech-blue .border-slate-200,
+html.tech-blue .border-slate-200\/80,
+html.tech-blue .border-slate-700,
+html.tech-blue .border-slate-800 {
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+
+/* Tech Blue Glow Lines & Borders */
+html.tech-blue .border-t,
+html.tech-blue .border-b,
+html.tech-blue .border-l,
+html.tech-blue .border-r,
+html.tech-blue [class*="border"] {
+  border-color: rgba(56, 189, 248, 0.26);
+}
+
+html.tech-blue .hover\:border-sky-500:hover,
+html.tech-blue .hover\:border-slate-300:hover {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5) !important;
+}
+
+html.tech-blue .text-sky-600,
+html.tech-blue .text-sky-500,
+html.tech-blue .text-sky-400 {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
+}
+
+html.tech-blue .bg-sky-600,
+html.tech-blue .bg-sky-500 {
+  background-color: #0284c7 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(14, 165, 233, 0.6) !important;
+}
+
+html.tech-blue .bg-sky-50,
+html.tech-blue .bg-sky-500\/10,
+html.tech-blue .bg-sky-950\/40 {
+  background-color: rgba(14, 165, 233, 0.12) !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+
+html.tech-blue .focus\:ring-sky-500:focus {
+  --tw-ring-color: #38bdf8 !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.5) !important;
+}
+
+/* ==========================================================================
+   5. 极客矩阵 (Matrix Green - 绿色为主，线条带光晕效果)
+   ========================================================================== */
+html.matrix {
+  color-scheme: dark;
+  background-color: #020b06;
+  color: #f0fdf4;
+}
+
+html.matrix body {
+  background-color: #020b06;
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(34, 197, 94, 0.16), transparent 70%),
+    radial-gradient(circle at 90% 100%, rgba(22, 163, 74, 0.1), transparent 50%);
+  color: #f0fdf4;
+}
+
+html.matrix .bg-white,
+html.matrix .bg-slate-900 {
+  background-color: #05190e !important;
+  border-color: rgba(34, 197, 94, 0.28) !important;
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.1) !important;
+}
+
+html.matrix .bg-slate-50,
+html.matrix .bg-slate-800,
+html.matrix .bg-slate-800\/80,
+html.matrix .bg-slate-800\/60 {
+  background-color: #0a2917 !important;
+  border-color: rgba(34, 197, 94, 0.35) !important;
+}
+
+html.matrix .border-slate-200,
+html.matrix .border-slate-200\/80,
+html.matrix .border-slate-700,
+html.matrix .border-slate-800 {
+  border-color: rgba(34, 197, 94, 0.3) !important;
+}
+
+/* Matrix Glow Lines & Borders */
+html.matrix .border-t,
+html.matrix .border-b,
+html.matrix .border-l,
+html.matrix .border-r,
+html.matrix [class*="border"] {
+  border-color: rgba(34, 197, 94, 0.26);
+}
+
+html.matrix .hover\:border-sky-500:hover,
+html.matrix .hover\:border-slate-300:hover {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.5) !important;
+}
+
+html.matrix .text-sky-600,
+html.matrix .text-sky-500,
+html.matrix .text-sky-400 {
+  color: #4ade80 !important;
+  text-shadow: 0 0 8px rgba(34, 197, 94, 0.45);
+}
+
+html.matrix .bg-sky-600,
+html.matrix .bg-sky-500 {
+  background-color: #16a34a !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.6) !important;
+}
+
+html.matrix .bg-sky-50,
+html.matrix .bg-sky-500\/10,
+html.matrix .bg-sky-950\/40 {
+  background-color: rgba(34, 197, 94, 0.12) !important;
+  border-color: rgba(34, 197, 94, 0.35) !important;
+}
+
+html.matrix .focus\:ring-sky-500:focus {
+  --tw-ring-color: #22c55e !important;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.5) !important;
+}
+
+/* Shimmer Animation for Skeleton Screens */
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-skeleton-shimmer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: skeleton-shimmer 1.8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  content: '';
+}
+
+.dark .animate-skeleton-shimmer::after {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+html.cyberpunk .animate-skeleton-shimmer::after {
+  background-image: linear-gradient(
+    90deg,
+    rgba(217, 70, 239, 0) 0,
+    rgba(217, 70, 239, 0.2) 50%,
+    rgba(217, 70, 239, 0) 100%
+  );
+}
+
+html.tech-blue .animate-skeleton-shimmer::after {
+  background-image: linear-gradient(
+    90deg,
+    rgba(56, 189, 248, 0) 0,
+    rgba(56, 189, 248, 0.2) 50%,
+    rgba(56, 189, 248, 0) 100%
+  );
+}
+
+html.matrix .animate-skeleton-shimmer::after {
+  background-image: linear-gradient(
+    90deg,
+    rgba(34, 197, 94, 0) 0,
+    rgba(34, 197, 94, 0.2) 50%,
+    rgba(34, 197, 94, 0) 100%
+  );
+}

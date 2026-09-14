@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CloudPulse Monitor & Telegram Bot</title>
+    <meta name="description" content="Full-stack server status monitoring system with Telegram bot push notifications, automated incident alerts, and remote data management." />
+    <meta property="og:title" content="CloudPulse Monitor & Telegram Bot" />
+    <meta property="og:description" content="Full-stack server status monitoring system with Telegram bot push notifications, automated incident alerts, and remote data management." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('cp_theme_mode');
+          var isDark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches) || (saved === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.remove('dark', 'cyberpunk', 'techblue', 'matrix');
+          if (saved === 'cyberpunk') {
+            document.documentElement.classList.add('dark', 'cyberpunk');
+          } else if (saved === 'techblue') {
+            document.documentElement.classList.add('dark', 'techblue');
+          } else if (saved === 'matrix') {
+            document.documentElement.classList.add('dark', 'matrix');
+          } else if (isDark) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-200">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,7 @@
+{
+  "name": "CloudPulse Monitor & Telegram Bot",
+  "description": "Full-stack server status monitoring system with Telegram bot push notifications, automated incident alerts, and remote data management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
