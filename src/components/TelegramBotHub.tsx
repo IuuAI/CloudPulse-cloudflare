@@ -46,7 +46,7 @@ export const TelegramBotHub: React.FC<TelegramBotHubProps> = ({
 `🚨 <b>【CloudPulse 监控告警】</b>
 
 <b>事件:</b> 核心 API 网关响应延迟突增超过阈值
-<b>指标:</b> 当前延迟 340ms (正常 < 50ms)
+<b>指标:</b> 当前延迟 340ms (正常 &lt; 50ms)
 <b>影响范围:</b> 欧洲与亚太边缘接入层
 <b>时间:</b> ${new Date().toLocaleTimeString()}
 
