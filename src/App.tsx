@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { WifiOff } from 'lucide-react';
+import { WifiOff, AlertTriangle } from 'lucide-react';
 import {
   ServiceItem,
   ServerNode,
@@ -20,6 +20,7 @@ import {
   fetchMetricsHistory,
   fetchTelegramConfig,
   fetchTelegramLogs,
+  fetchHealth,
   createIncident,
   addIncidentUpdate,
   resolveIncident,

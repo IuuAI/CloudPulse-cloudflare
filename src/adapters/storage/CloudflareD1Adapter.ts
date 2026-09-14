@@ -16,8 +16,8 @@ export class CloudflareD1Adapter implements StorageAdapter {
     this.checkBinding();
     if (this.initialized) return;
     try {
-      await this.db!.exec(`
-        CREATE TABLE IF NOT EXISTS system_overview (
+      const tableStatements = [
+        `CREATE TABLE IF NOT EXISTS system_overview (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           uptime REAL NOT NULL,
           total_nodes INTEGER NOT NULL,
@@ -25,9 +25,8 @@ export class CloudflareD1Adapter implements StorageAdapter {
           active_incidents INTEGER NOT NULL,
           avg_latency INTEGER NOT NULL,
           last_checked TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS services (
+        )`,
+        `CREATE TABLE IF NOT EXISTS services (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           category TEXT NOT NULL,
@@ -38,9 +37,8 @@ export class CloudflareD1Adapter implements StorageAdapter {
           url TEXT,
           description TEXT,
           uptime_history TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS server_nodes (
+        )`,
+        `CREATE TABLE IF NOT EXISTS server_nodes (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           region TEXT NOT NULL,
@@ -57,9 +55,8 @@ export class CloudflareD1Adapter implements StorageAdapter {
           probe_token TEXT,
           os TEXT,
           tags TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS incidents (
+        )`,
+        `CREATE TABLE IF NOT EXISTS incidents (
           id TEXT PRIMARY KEY,
           title TEXT NOT NULL,
           severity TEXT NOT NULL,
@@ -68,18 +65,16 @@ export class CloudflareD1Adapter implements StorageAdapter {
           started_at TEXT NOT NULL,
           resolved_at TEXT,
           updates TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS metrics_history (
+        )`,
+        `CREATE TABLE IF NOT EXISTS metrics_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           timestamp TEXT NOT NULL,
           avg_latency INTEGER NOT NULL,
           cpu_load INTEGER NOT NULL,
           ram_load INTEGER NOT NULL,
           p95_latency INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS telegram_config (
+        )`,
+        `CREATE TABLE IF NOT EXISTS telegram_config (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           bot_token TEXT,
           chat_id TEXT,
@@ -89,18 +84,16 @@ export class CloudflareD1Adapter implements StorageAdapter {
           alert_on_incident INTEGER NOT NULL,
           daily_digest INTEGER NOT NULL,
           digest_time TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS telegram_logs (
+        )`,
+        `CREATE TABLE IF NOT EXISTS telegram_logs (
           id TEXT PRIMARY KEY,
           timestamp TEXT NOT NULL,
           type TEXT NOT NULL,
           status TEXT NOT NULL,
           message TEXT NOT NULL,
           details TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS quota_settings (
+        )`,
+        `CREATE TABLE IF NOT EXISTS quota_settings (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           worker_daily_request_limit INTEGER NOT NULL,
           history_retention_days INTEGER NOT NULL,
@@ -109,13 +102,15 @@ export class CloudflareD1Adapter implements StorageAdapter {
           heartbeat_interval_seconds INTEGER NOT NULL,
           client_poll_interval_seconds INTEGER NOT NULL,
           max_stored_metric_points INTEGER NOT NULL
-        );
-      `);
+        )`
+      ];
+
+      await this.db!.batch(tableStatements.map(sql => this.db!.prepare(sql)));
 
       const ovCheck = await this.db!.prepare("SELECT COUNT(*) as cnt FROM system_overview").first() as any;
       if (!ovCheck || ovCheck.cnt === 0) {
         await this.db!.prepare(`
-          INSERT INTO system_overview (id, uptime, total_nodes, healthy_nodes, active_incidents, avg_latency, last_checked)
+          INSERT OR IGNORE INTO system_overview (id, uptime, total_nodes, healthy_nodes, active_incidents, avg_latency, last_checked)
           VALUES (1, 99.98, 6, 6, 0, 42, ?)
         `).bind(new Date().toISOString()).run();
 
@@ -143,12 +138,12 @@ export class CloudflareD1Adapter implements StorageAdapter {
         }
 
         await this.db!.prepare(`
-          INSERT INTO telegram_config (id, bot_token, chat_id, enabled, alert_on_status_change, alert_on_high_load, alert_on_incident, daily_digest, digest_time)
+          INSERT OR IGNORE INTO telegram_config (id, bot_token, chat_id, enabled, alert_on_status_change, alert_on_high_load, alert_on_incident, daily_digest, digest_time)
           VALUES (1, '', '', 0, 1, 1, 1, 0, '08:00')
         `).run();
 
         await this.db!.prepare(`
-          INSERT INTO quota_settings (id, worker_daily_request_limit, history_retention_days, eco_mode, auto_prune_expired_history, heartbeat_interval_seconds, client_poll_interval_seconds, max_stored_metric_points)
+          INSERT OR IGNORE INTO quota_settings (id, worker_daily_request_limit, history_retention_days, eco_mode, auto_prune_expired_history, heartbeat_interval_seconds, client_poll_interval_seconds, max_stored_metric_points)
           VALUES (1, 100000, 30, 1, 1, 60, 30, 720)
         `).run();
       }

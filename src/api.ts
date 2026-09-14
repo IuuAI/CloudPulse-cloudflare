@@ -145,8 +145,8 @@ export async function saveTelegramConfig(config: Partial<TelegramConfig>): Promi
   if (!res.ok) {
     let errMsg = 'Failed to update telegram config';
     try {
-      const errJson = await res.json();
-      if (errJson.error || errJson.message) {
+      const errJson: any = await res.json();
+      if (errJson && (errJson.error || errJson.message)) {
         errMsg = errJson.error || errJson.message;
       }
     } catch {}
