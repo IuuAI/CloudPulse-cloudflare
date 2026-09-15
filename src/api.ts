@@ -38,7 +38,19 @@ export function setApiBaseUrl(url: string) {
 export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   const base = getApiBase();
   const url = base ? `${base}${path.startsWith('/') ? path : `/${path}`}` : path;
-  return window.fetch(url, options);
+  const headers = new Headers(options?.headers || {});
+
+  try {
+    const token = localStorage.getItem('cloudpulse_admin_token');
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  } catch (e) {}
+
+  return window.fetch(url, {
+    ...options,
+    headers,
+  });
 }
 
 const fetch = apiFetch;
@@ -239,15 +251,23 @@ export async function pruneExpiredHistory(retentionDays?: number): Promise<{
 }
 
 export async function verifyAdminAuth(password?: string): Promise<boolean> {
+  const token = localStorage.getItem('cloudpulse_admin_token');
+  if (!password && !token) return false;
+
   const res = await fetch('/api/admin/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
   });
-  if (!res.ok) return false;
+  if (!res.ok) {
+    if (!password) localStorage.removeItem('cloudpulse_admin_token');
+    return false;
+  }
   const data: any = await res.json();
-  if (data.success && data.token) {
-    localStorage.setItem('cloudpulse_admin_token', data.token);
+  if (data.success) {
+    if (data.token) {
+      localStorage.setItem('cloudpulse_admin_token', data.token);
+    }
     return true;
   }
   return false;
@@ -551,9 +571,9 @@ export async function fetchApiKeysConfig(): Promise<import('./types').SystemApiK
       geminiModel: 'gemini-2.5-flash',
       hasCloudflareApiToken: false,
       hasTelegramBotToken: false,
-      probeSecretKey: 'probe-secret-key-prod-9988',
-      webhookSigningSecret: 'whsec_772189acbe3190',
-      openApiBearerToken: 'cpm_live_token_719028',
+      probeSecretKey: '',
+      webhookSigningSecret: '',
+      openApiBearerToken: '',
     };
   }
   const data: any = await res.json();

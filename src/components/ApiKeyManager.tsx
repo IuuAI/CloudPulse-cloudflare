@@ -34,9 +34,9 @@ export const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ onShowToast }) => 
     cloudflareZoneId: '',
     telegramBotToken: '',
     telegramChatId: '',
-    probeSecretKey: 'probe-secret-key-prod-9988',
-    webhookSigningSecret: 'whsec_772189acbe3190',
-    openApiBearerToken: 'cpm_live_token_719028',
+    probeSecretKey: '',
+    webhookSigningSecret: '',
+    openApiBearerToken: '',
   });
 
   const [isLoading, setIsLoading] = useState(false);

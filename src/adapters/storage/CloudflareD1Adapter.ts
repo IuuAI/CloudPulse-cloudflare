@@ -5,6 +5,8 @@ export class CloudflareD1Adapter implements StorageAdapter {
   private initialized = false;
   private rowsReadSession = 0;
   private rowsWrittenSession = 0;
+  private unpersistedReads = 0;
+  private unpersistedWrites = 0;
 
   constructor(private db?: D1Database) {}
 
@@ -19,11 +21,44 @@ export class CloudflareD1Adapter implements StorageAdapter {
   }
 
   private recordRead(rows: number = 1) {
-    this.rowsReadSession += Math.max(1, rows);
+    const count = Math.max(1, rows);
+    this.rowsReadSession += count;
+    this.unpersistedReads += count;
+    if (this.unpersistedReads >= 20) {
+      this.flushDailyStats().catch(() => {});
+    }
   }
 
   private recordWrite(rows: number = 1) {
-    this.rowsWrittenSession += Math.max(1, rows);
+    const count = Math.max(1, rows);
+    this.rowsWrittenSession += count;
+    this.unpersistedWrites += count;
+    if (this.unpersistedWrites >= 5) {
+      this.flushDailyStats().catch(() => {});
+    }
+  }
+
+  private async flushDailyStats() {
+    if (!this.db || !this.initialized || (this.unpersistedReads === 0 && this.unpersistedWrites === 0)) return;
+    const readsToFlush = this.unpersistedReads;
+    const writesToFlush = this.unpersistedWrites;
+    this.unpersistedReads = 0;
+    this.unpersistedWrites = 0;
+
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      await this.db.prepare(`
+        INSERT INTO d1_daily_stats (date, rows_read, rows_written, last_updated)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(date) DO UPDATE SET
+          rows_read = d1_daily_stats.rows_read + excluded.rows_read,
+          rows_written = d1_daily_stats.rows_written + excluded.rows_written,
+          last_updated = excluded.last_updated
+      `).bind(today, readsToFlush, writesToFlush, new Date().toISOString()).run();
+    } catch (e) {
+      this.unpersistedReads += readsToFlush;
+      this.unpersistedWrites += writesToFlush;
+    }
   }
 
   private async ensureInitialized() {
@@ -186,6 +221,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async getOverview() {
     await this.ensureInitialized();
+    this.recordRead(1);
     const { results } = await this.db!.prepare("SELECT * FROM system_overview WHERE id = 1").all();
     if (!results || results.length === 0) {
       return { uptime: 99.98, totalNodes: 6, healthyNodes: 6, activeIncidents: 0, avgLatency: 42, lastChecked: new Date().toISOString() };
@@ -196,6 +232,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async saveOverview(ov: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare(`
       INSERT INTO system_overview (id, uptime, total_nodes, healthy_nodes, active_incidents, avg_latency, last_checked)
       VALUES (1, ?, ?, ?, ?, ?, ?)
@@ -206,6 +243,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
   async getServices() {
     await this.ensureInitialized();
     const { results } = await this.db!.prepare("SELECT * FROM services").all();
+    this.recordRead(results?.length || 1);
     return (results || []).map((r: any) => ({
       id: r.id,
       name: r.name,
@@ -222,6 +260,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async saveService(s: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     const historyJson = s.uptimeHistory ? JSON.stringify(s.uptimeHistory) : null;
     await this.db!.prepare(`
       INSERT INTO services (id, name, category, status, latency, uptime, last_check, url, description, uptime_history)
@@ -252,12 +291,14 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async deleteService(id: string) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare("DELETE FROM services WHERE id = ?").bind(id).run();
   }
 
   async getNodes() {
     await this.ensureInitialized();
     const { results } = await this.db!.prepare("SELECT * FROM server_nodes").all();
+    this.recordRead(results?.length || 1);
     return (results || []).map((r: any) => ({
       id: r.id,
       name: r.name,
@@ -280,6 +321,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async saveNode(n: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     const tagsJson = JSON.stringify(n.tags || []);
     await this.db!.prepare(`
       INSERT INTO server_nodes (id, name, region, ip, status, cpu, ram, disk, ping, network_in, network_out, uptime, last_seen, probe_token, os, tags)
@@ -321,17 +363,20 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async deleteNode(id: string) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare("DELETE FROM server_nodes WHERE id = ?").bind(id).run();
   }
 
   async getIncidents() {
     await this.ensureInitialized();
     const { results } = await this.db!.prepare("SELECT * FROM incidents ORDER BY started_at DESC").all();
+    this.recordRead(results?.length || 1);
     return (results || []).map((r: any) => ({ id: r.id, title: r.title, severity: r.severity, status: r.status, affectedServices: JSON.parse(r.affected_services || '[]'), startedAt: r.started_at, resolvedAt: r.resolved_at || undefined, updates: JSON.parse(r.updates || '[]') }));
   }
 
   async saveIncident(inc: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare(`
       INSERT INTO incidents (id, title, severity, status, affected_services, started_at, resolved_at, updates)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -341,17 +386,30 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async deleteIncident(id: string) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare("DELETE FROM incidents WHERE id = ?").bind(id).run();
   }
 
   async getMetricsHistory() {
     await this.ensureInitialized();
     const { results } = await this.db!.prepare("SELECT * FROM metrics_history ORDER BY id ASC LIMIT 200").all();
-    return (results || []).map((r: any) => ({ timestamp: r.timestamp, avgLatency: r.avg_latency, cpuLoad: r.cpu_load, ramLoad: r.ram_load, p95Latency: r.p95_latency }));
+    this.recordRead(results?.length || 1);
+    return (results || []).map((r: any) => ({ 
+      timestamp: r.timestamp, 
+      avgLatency: r.avg_latency, 
+      cpuLoad: r.cpu_load, 
+      ramLoad: r.ram_load,
+      avgCpu: r.cpu_load,
+      avgRam: r.ram_load,
+      peakCpu: Math.min(100, Math.round(r.cpu_load * 1.25)),
+      peakRam: Math.min(100, Math.round(r.ram_load * 1.15)),
+      p95Latency: r.p95_latency 
+    }));
   }
 
   async saveMetricPoint(pt: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare(`
       INSERT INTO metrics_history (timestamp, avg_latency, cpu_load, ram_load, p95_latency)
       VALUES (?, ?, ?, ?, ?)
@@ -360,6 +418,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async getTelegramConfig() {
     await this.ensureInitialized();
+    this.recordRead(1);
     const { results } = await this.db!.prepare("SELECT * FROM telegram_config WHERE id = 1").all();
     if (!results || results.length === 0) return { botToken: '', chatId: '', enabled: false, alertOnStatusChange: true, alertOnHighLoad: true, alertOnIncident: true, dailyDigest: false, digestTime: '08:00' };
     const r: any = results[0];
@@ -368,6 +427,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async saveTelegramConfig(cfg: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare(`
       INSERT INTO telegram_config (id, bot_token, chat_id, enabled, alert_on_status_change, alert_on_high_load, alert_on_incident, daily_digest, digest_time)
       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -378,11 +438,13 @@ export class CloudflareD1Adapter implements StorageAdapter {
   async getTelegramLogs() {
     await this.ensureInitialized();
     const { results } = await this.db!.prepare("SELECT * FROM telegram_logs ORDER BY timestamp DESC LIMIT 50").all();
+    this.recordRead(results?.length || 1);
     return (results || []).map((r: any) => ({ id: r.id, timestamp: r.timestamp, type: r.type, status: r.status, message: r.message, details: r.details || undefined }));
   }
 
   async saveTelegramLog(log: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     try {
       await this.db!.prepare(`
         INSERT INTO telegram_logs (id, timestamp, type, status, message, details)
@@ -395,6 +457,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async getQuotaSettings() {
     await this.ensureInitialized();
+    this.recordRead(1);
     const { results } = await this.db!.prepare("SELECT * FROM quota_settings WHERE id = 1").all();
     if (!results || results.length === 0) return { workerDailyRequestLimit: 100000, historyRetentionDays: 30, ecoMode: true, autoPruneExpiredHistory: true, heartbeatIntervalSeconds: 60, clientPollIntervalSeconds: 30, maxStoredMetricPoints: 720 };
     const r: any = results[0];
@@ -403,6 +466,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async saveQuotaSettings(q: any) {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare(`
       INSERT INTO quota_settings (id, worker_daily_request_limit, history_retention_days, eco_mode, auto_prune_expired_history, heartbeat_interval_seconds, client_poll_interval_seconds, max_stored_metric_points)
       VALUES (1, ?, ?, ?, ?, ?, ?, ?)
@@ -466,16 +530,15 @@ export class CloudflareD1Adapter implements StorageAdapter {
     }
 
     // 3. Daily read/write tracking persisted in d1_daily_stats
+    await this.flushDailyStats();
     let dailyRowsRead = Math.max(this.rowsReadSession, 1);
     let dailyRowsWritten = Math.max(this.rowsWrittenSession, 1);
 
     try {
       const existing = await this.db!.prepare("SELECT rows_read, rows_written FROM d1_daily_stats WHERE date = ?").bind(today).first() as any;
       if (existing) {
-        dailyRowsRead += Number(existing.rows_read || 0);
-        dailyRowsWritten += Number(existing.rows_written || 0);
-      } else {
-        await this.db!.prepare("INSERT OR IGNORE INTO d1_daily_stats (date, rows_read, rows_written, last_updated) VALUES (?, ?, ?, ?)").bind(today, dailyRowsRead, dailyRowsWritten, new Date().toISOString()).run();
+        dailyRowsRead = Number(existing.rows_read || 0) + this.unpersistedReads;
+        dailyRowsWritten = Number(existing.rows_written || 0) + this.unpersistedWrites;
       }
     } catch {}
 

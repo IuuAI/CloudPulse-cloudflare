@@ -1,3 +1,6 @@
+-- CloudPulse Migration 001: Initial Complete Schema
+-- Tables aligned with CloudflareD1Adapter & SQLite storage
+
 CREATE TABLE IF NOT EXISTS system_overview (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   uptime REAL NOT NULL,
@@ -15,7 +18,10 @@ CREATE TABLE IF NOT EXISTS services (
   status TEXT NOT NULL,
   latency INTEGER NOT NULL,
   uptime REAL NOT NULL,
-  last_check TEXT NOT NULL
+  last_check TEXT NOT NULL,
+  url TEXT,
+  description TEXT,
+  uptime_history TEXT
 );
 
 CREATE TABLE IF NOT EXISTS server_nodes (
@@ -31,7 +37,10 @@ CREATE TABLE IF NOT EXISTS server_nodes (
   network_in TEXT NOT NULL,
   network_out TEXT NOT NULL,
   uptime REAL NOT NULL,
-  last_seen TEXT NOT NULL
+  last_seen TEXT NOT NULL,
+  probe_token TEXT,
+  os TEXT,
+  tags TEXT
 );
 
 CREATE TABLE IF NOT EXISTS incidents (
@@ -84,4 +93,16 @@ CREATE TABLE IF NOT EXISTS quota_settings (
   heartbeat_interval_seconds INTEGER NOT NULL,
   client_poll_interval_seconds INTEGER NOT NULL,
   max_stored_metric_points INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  admin_password TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS d1_daily_stats (
+  date TEXT PRIMARY KEY,
+  rows_read INTEGER NOT NULL DEFAULT 0,
+  rows_written INTEGER NOT NULL DEFAULT 0,
+  last_updated TEXT NOT NULL
 );

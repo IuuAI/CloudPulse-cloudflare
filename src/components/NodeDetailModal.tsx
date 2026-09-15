@@ -132,12 +132,6 @@ export const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
             </span>
           </div>
           <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
-            <span className="text-slate-500">探针密钥 (Probe Token):</span>
-            <span className="font-mono text-xs text-sky-600 dark:text-sky-400">
-              {node.probeToken}
-            </span>
-          </div>
-          <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
             <span className="text-slate-500">正常可用时间 (Uptime):</span>
             <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
               {node.uptime}

@@ -4,6 +4,10 @@ dist/
 coverage/
 .DS_Store
 *.log
+*.db
+*.sqlite
+*.sqlite3
+data/
 .env*
 !.env.example
 package-lock.json

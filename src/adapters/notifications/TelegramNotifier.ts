@@ -53,6 +53,7 @@ export async function sendTelegramNotification(
         text: sanitizedText,
         parse_mode: parseMode,
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
     let data: any = await response.json();
@@ -69,6 +70,7 @@ export async function sendTelegramNotification(
           chat_id: chatId,
           text: text.replace(/<[^>]*>/g, ''), // Strip tags for clean plain text delivery
         }),
+        signal: AbortSignal.timeout(8000),
       });
       const fallbackData: any = await fallbackResponse.json();
       if (fallbackData.ok) {

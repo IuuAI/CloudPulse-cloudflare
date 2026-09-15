@@ -107,6 +107,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Probe Script Modal
   const [selectedNodeForProbe, setSelectedNodeForProbe] = useState<ServerNode | null>(null);
+  const [showProbeToken, setShowProbeToken] = useState(false);
   const [copiedScript, setCopiedScript] = useState<string | null>(null);
   const [deployMode, setDeployMode] = useState<'separated' | 'fullstack' | 'cli'>('separated');
 
@@ -227,7 +228,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           status: nodeForm.status,
           tags: tagsArray,
         });
-        onShowToast('success', '服务器探针已添加', `探针密钥: ${created.probeToken}`);
+        onShowToast('success', '服务器探针已添加', `服务器 ${created.name} 接入密钥已生成，请在脚本面板中配置使用。`);
         setSelectedNodeForProbe(created);
       }
       setIsNodeModalOpen(false);
@@ -1803,9 +1804,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
                     一键探针安装脚本: {selectedNodeForProbe.name}
                   </h3>
-                  <p className="text-xs text-slate-500 font-mono">
-                    Token: {selectedNodeForProbe.probeToken}
-                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-xs text-slate-500 font-mono">
+                      Token: {showProbeToken ? (selectedNodeForProbe.probeToken || '已保护') : (selectedNodeForProbe.probeToken ? `${selectedNodeForProbe.probeToken.slice(0, 10)}••••••••` : '已保护')}
+                    </p>
+                    {selectedNodeForProbe.probeToken && (
+                      <button
+                        type="button"
+                        onClick={() => setShowProbeToken(!showProbeToken)}
+                        className="text-[11px] text-sky-500 hover:text-sky-600 underline font-medium"
+                      >
+                        {showProbeToken ? '隐藏' : '显示'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

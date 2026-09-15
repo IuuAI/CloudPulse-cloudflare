@@ -1,8 +1,30 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { sign, verify } from 'hono/jwt';
 import { StorageAdapter, CacheAdapter } from '../core/types';
 import { runMonitorCycle } from '../core/monitor';
 import { sendTelegramNotification } from '../adapters/notifications/TelegramNotifier';
+
+function getJwtSecret(c: any, defaultEnv?: any): string {
+  const runtimeEnv = (c.env as any) || defaultEnv || (typeof process !== 'undefined' ? process.env : {});
+  return runtimeEnv.JWT_SECRET || runtimeEnv.ADMIN_PASSWORD || 'cloudpulse-edge-jwt-secret-key-2026';
+}
+
+async function verifyAdminAuth(c: any, defaultEnv?: any): Promise<boolean> {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return false;
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) return false;
+  try {
+    const secret = getJwtSecret(c, defaultEnv);
+    const payload = await verify(token, secret, 'HS256');
+    return !!(payload && payload.role === 'admin');
+  } catch {
+    return false;
+  }
+}
 
 export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, env?: any) {
   const app = new Hono();
@@ -15,14 +37,31 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     maxAge: 86400,
   }));
 
+  const getEnv = (c: any) => (c.env as any) || env || (typeof process !== 'undefined' ? process.env : {});
+
+  const requireAdmin = async (c: any, next: () => Promise<void>) => {
+    const isAuthed = await verifyAdminAuth(c, env);
+    if (!isAuthed) {
+      return c.json({ success: false, error: '需要管理员授权，请先登录管理员账户' }, 401);
+    }
+    await next();
+  };
+
   // Health check (no sensitive leak)
-  app.get('/api/health', (c) => {
+  app.get('/api/health', async (c) => {
+    const runtimeEnv = getEnv(c);
+    const d1Usage = storage.getD1UsageStats ? await storage.getD1UsageStats().catch(() => undefined) : undefined;
+    const kvUsage = cache.getKVUsageStats ? await cache.getKVUsageStats().catch(() => undefined) : undefined;
     return c.json({ 
       status: 'ok', 
       uptime: (typeof process !== 'undefined' && process.uptime) ? process.uptime() : 0,
       envConfigured: {
-        hasAdminPassword: !!(env?.ADMIN_PASSWORD || (typeof process !== 'undefined' && process.env?.ADMIN_PASSWORD)),
-        hasTelegramToken: !!(env?.TELEGRAM_BOT_TOKEN || (typeof process !== 'undefined' && process.env?.TELEGRAM_BOT_TOKEN))
+        hasAdminPassword: !!runtimeEnv.ADMIN_PASSWORD,
+        hasTelegramToken: !!runtimeEnv.TELEGRAM_BOT_TOKEN
+      },
+      dailyUsage: {
+        d1: d1Usage,
+        kv: kvUsage,
       }
     });
   });
@@ -49,7 +88,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  app.post('/api/services', async (c) => {
+  app.post('/api/services', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const newService = {
@@ -71,7 +110,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  app.put('/api/services/:id', async (c) => {
+  app.put('/api/services/:id', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       const body = await c.req.json();
@@ -90,7 +129,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  app.delete('/api/services/:id', async (c) => {
+  app.delete('/api/services/:id', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       if (storage.deleteService) {
@@ -103,39 +142,38 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
   });
 
   // Services Live Check
-  app.post('/api/services/:id/check', async (c) => {
+  app.post('/api/services/:id/check', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       const services = await storage.getServices();
       const service = services.find((s: any) => s.id === id);
       if (!service) return c.json({ error: 'Service not found' }, 404);
 
-      let simulatedLatency = Math.floor(Math.random() * 35) + 15;
+      let measuredLatency = 20;
       let checkStatus = 'operational';
 
       if (service.url && (service.url.startsWith('http://') || service.url.startsWith('https://'))) {
         try {
           const t0 = Date.now();
           const probeRes = await fetch(service.url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-          simulatedLatency = Date.now() - t0;
+          measuredLatency = Date.now() - t0;
           if (!probeRes.ok && probeRes.status >= 500) {
             checkStatus = 'degraded';
           }
         } catch {
-          // If remote probe fails or times out
-          simulatedLatency = Math.floor(Math.random() * 80) + 120;
+          measuredLatency = 999;
           checkStatus = 'degraded';
         }
       }
 
-      service.latency = simulatedLatency;
+      service.latency = measuredLatency;
       service.status = checkStatus;
       service.lastCheck = new Date().toISOString();
       await storage.saveService(service);
 
       return c.json({
         success: true,
-        latency: simulatedLatency,
+        latency: measuredLatency,
         status: checkStatus,
         service,
       });
@@ -144,14 +182,15 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  // Nodes
+  // Nodes - ProbeToken is filtered for non-admin viewers to prevent leak
   app.get('/api/nodes', async (c) => {
     try {
       const nodes = await storage.getNodes();
-      // Hide public IP for servers and probes to protect node infrastructure
+      const isAdmin = await verifyAdminAuth(c, env);
       const sanitizedNodes = (nodes || []).map((node: any) => ({
         ...node,
         ip: '***.***.***.***',
+        probeToken: isAdmin ? node.probeToken : undefined,
       }));
       return c.json(sanitizedNodes);
     } catch (err: any) {
@@ -159,24 +198,27 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  app.post('/api/nodes', async (c) => {
+  app.post('/api/nodes', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
+      const nodeUuid = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? crypto.randomUUID().replace(/-/g, '').slice(0, 16) 
+        : Math.random().toString(36).slice(2, 10);
       const newNode = {
         id: body.id || `n-${Date.now()}`,
         name: body.name || '新探针节点',
         region: body.region || 'Asia (Tokyo)',
         ip: body.ip || '***.***.***.***',
         status: body.status || 'healthy',
-        cpu: body.cpu || Math.floor(Math.random() * 30) + 10,
-        ram: body.ram || Math.floor(Math.random() * 30) + 20,
-        disk: body.disk || 35,
-        ping: body.ping || 25,
-        networkIn: body.networkIn || '1.2 TB',
-        networkOut: body.networkOut || '3.5 TB',
-        uptime: body.uptime || 99.9,
+        cpu: typeof body.cpu === 'number' ? body.cpu : 0,
+        ram: typeof body.ram === 'number' ? body.ram : 0,
+        disk: typeof body.disk === 'number' ? body.disk : 20,
+        ping: typeof body.ping === 'number' ? body.ping : 20,
+        networkIn: body.networkIn || '0 B',
+        networkOut: body.networkOut || '0 B',
+        uptime: body.uptime || 100,
         lastSeen: new Date().toISOString(),
-        probeToken: `cpm_probe_${Math.random().toString(36).slice(2, 10)}`,
+        probeToken: `cpm_probe_${nodeUuid}`,
         tags: body.tags || [],
       };
       await storage.saveNode(newNode);
@@ -186,7 +228,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  app.put('/api/nodes/:id', async (c) => {
+  app.put('/api/nodes/:id', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       const body = await c.req.json();
@@ -205,7 +247,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  app.delete('/api/nodes/:id', async (c) => {
+  app.delete('/api/nodes/:id', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       if (storage.deleteNode) {
@@ -217,16 +259,13 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  app.post('/api/nodes/:id/probe', async (c) => {
+  app.post('/api/nodes/:id/probe', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       const nodes = await storage.getNodes();
       const node = nodes.find((n: any) => n.id === id);
       if (!node) return c.json({ error: 'Node not found' }, 404);
 
-      node.cpu = Math.floor(Math.random() * 40) + 15;
-      node.ram = Math.floor(Math.random() * 30) + 35;
-      node.ping = Math.floor(Math.random() * 20) + 10;
       node.lastSeen = new Date().toISOString();
       node.status = 'healthy';
       await storage.saveNode(node);
@@ -237,7 +276,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  // Probe Heartbeat Report Ingest Endpoint
+  // Probe Heartbeat Report Ingest Endpoint (authenticated via probe token)
   app.post('/api/probe/report', async (c) => {
     try {
       const body = await c.req.json();
@@ -319,7 +358,7 @@ done
     }
   });
 
-  app.post('/api/incidents', async (c) => {
+  app.post('/api/incidents', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const newInc = {
@@ -354,7 +393,7 @@ done
     }
   });
 
-  app.post('/api/incidents/:id/updates', async (c) => {
+  app.post('/api/incidents/:id/updates', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       const body = await c.req.json();
@@ -376,7 +415,7 @@ done
     }
   });
 
-  app.post('/api/incidents/:id/resolve', async (c) => {
+  app.post('/api/incidents/:id/resolve', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       const body = await c.req.json();
@@ -399,7 +438,7 @@ done
     }
   });
 
-  app.delete('/api/incidents/:id', async (c) => {
+  app.delete('/api/incidents/:id', requireAdmin, async (c) => {
     try {
       const id = c.req.param('id');
       if (storage.deleteIncident) {
@@ -435,7 +474,7 @@ done
     }
   });
 
-  app.post('/api/telegram/config', async (c) => {
+  app.post('/api/telegram/config', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const current = await storage.getTelegramConfig();
@@ -460,7 +499,7 @@ done
     }
   });
 
-  app.post('/api/telegram/push', async (c) => {
+  app.post('/api/telegram/push', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const cfg = await storage.getTelegramConfig();
@@ -489,8 +528,12 @@ done
   app.get('/api/settings/quota', async (c) => {
     try {
       const settings = await storage.getQuotaSettings();
-      const d1Usage = storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined;
-      const kvUsage = cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined;
+      const cachedD1 = await cache.get('cached_d1_usage');
+      const cachedKV = await cache.get('cached_kv_usage');
+      const d1Usage = cachedD1 || (storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined);
+      const kvUsage = cachedKV || (cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined);
+      if (!cachedD1 && d1Usage) await cache.set('cached_d1_usage', d1Usage, 15);
+      if (!cachedKV && kvUsage) await cache.set('cached_kv_usage', kvUsage, 15);
       return c.json({
         ...settings,
         d1Usage,
@@ -501,10 +544,16 @@ done
     }
   });
 
+  // Usage with 15-second cache
   app.get('/api/settings/quota/usage', async (c) => {
     try {
-      const d1Usage = storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined;
-      const kvUsage = cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined;
+      const cachedD1 = await cache.get('cached_d1_usage');
+      const cachedKV = await cache.get('cached_kv_usage');
+      const d1Usage = cachedD1 || (storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined);
+      const kvUsage = cachedKV || (cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined);
+      if (!cachedD1 && d1Usage) await cache.set('cached_d1_usage', d1Usage, 15);
+      if (!cachedKV && kvUsage) await cache.set('cached_kv_usage', kvUsage, 15);
+      c.header('Cache-Control', 'public, max-age=15, s-maxage=15');
       return c.json({
         success: true,
         d1Usage,
@@ -518,8 +567,13 @@ done
   // Cloudflare D1 & KV Daily Usage
   app.get('/api/cloudflare/daily-usage', async (c) => {
     try {
-      const d1Usage = storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined;
-      const kvUsage = cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined;
+      const cachedD1 = await cache.get('cached_d1_usage');
+      const cachedKV = await cache.get('cached_kv_usage');
+      const d1Usage = cachedD1 || (storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined);
+      const kvUsage = cachedKV || (cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined);
+      if (!cachedD1 && d1Usage) await cache.set('cached_d1_usage', d1Usage, 15);
+      if (!cachedKV && kvUsage) await cache.set('cached_kv_usage', kvUsage, 15);
+      c.header('Cache-Control', 'public, max-age=15, s-maxage=15');
       return c.json({
         success: true,
         timestamp: new Date().toISOString(),
@@ -531,7 +585,9 @@ done
     }
   });
 
-  app.put('/api/settings/quota', async (c) => {
+  app.get('/api/cloudflare/quota', (c) => c.redirect('/api/cloudflare/daily-usage'));
+
+  app.put('/api/settings/quota', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const current = await storage.getQuotaSettings();
@@ -543,7 +599,7 @@ done
     }
   });
 
-  app.post('/api/settings/quota/prune', async (c) => {
+  app.post('/api/settings/quota/prune', requireAdmin, async (c) => {
     try {
       const settings = await storage.getQuotaSettings();
       const prunedCount = await storage.pruneHistory(settings.historyRetentionDays);
@@ -553,20 +609,20 @@ done
     }
   });
 
-  // API Keys & Credentials Management
+  // API Keys & Credentials Management - All hardcoded keys removed
   app.get('/api/settings/api-keys', async (c) => {
     try {
       const cached = (await cache.get('system_api_keys')) || {};
-      const procEnv = (typeof process !== 'undefined' && process.env) ? process.env : {} as any;
+      const runtimeEnv = getEnv(c);
       const envKeys = {
-        geminiApiKey: env?.GEMINI_API_KEY || procEnv.GEMINI_API_KEY || '',
-        cloudflareApiToken: env?.CLOUDFLARE_API_TOKEN || procEnv.CLOUDFLARE_API_TOKEN || '',
-        cloudflareAccountId: env?.CLOUDFLARE_ACCOUNT_ID || procEnv.CLOUDFLARE_ACCOUNT_ID || '',
-        telegramBotToken: env?.TELEGRAM_BOT_TOKEN || procEnv.TELEGRAM_BOT_TOKEN || '',
-        telegramChatId: env?.TELEGRAM_CHAT_ID || procEnv.TELEGRAM_CHAT_ID || '',
-        probeSecretKey: env?.PROBE_SECRET_KEY || procEnv.PROBE_SECRET_KEY || 'probe-secret-key-prod-9988',
-        webhookSigningSecret: env?.WEBHOOK_SECRET || procEnv.WEBHOOK_SECRET || 'whsec_772189acbe3190',
-        openApiBearerToken: env?.OPENAPI_BEARER_TOKEN || procEnv.OPENAPI_BEARER_TOKEN || 'cpm_live_token_719028',
+        geminiApiKey: runtimeEnv.GEMINI_API_KEY || '',
+        cloudflareApiToken: runtimeEnv.CLOUDFLARE_API_TOKEN || '',
+        cloudflareAccountId: runtimeEnv.CLOUDFLARE_ACCOUNT_ID || '',
+        telegramBotToken: runtimeEnv.TELEGRAM_BOT_TOKEN || '',
+        telegramChatId: runtimeEnv.TELEGRAM_CHAT_ID || '',
+        probeSecretKey: runtimeEnv.PROBE_SECRET_KEY || '',
+        webhookSigningSecret: runtimeEnv.WEBHOOK_SECRET || '',
+        openApiBearerToken: runtimeEnv.OPENAPI_BEARER_TOKEN || '',
       };
       const merged = { ...envKeys, ...cached };
       return c.json({
@@ -579,9 +635,9 @@ done
         telegramBotToken: merged.telegramBotToken ? `${merged.telegramBotToken.slice(0, 6)}...${merged.telegramBotToken.slice(-4)}` : '',
         hasTelegramBotToken: !!merged.telegramBotToken,
         telegramChatId: merged.telegramChatId || '',
-        probeSecretKey: merged.probeSecretKey || 'probe-secret-key-prod-9988',
-        webhookSigningSecret: merged.webhookSigningSecret || 'whsec_772189acbe3190',
-        openApiBearerToken: merged.openApiBearerToken || 'cpm_live_token_719028',
+        probeSecretKey: merged.probeSecretKey || '',
+        webhookSigningSecret: merged.webhookSigningSecret || '',
+        openApiBearerToken: merged.openApiBearerToken || '',
         updatedAt: merged.updatedAt || new Date().toISOString(),
       });
     } catch (err: any) {
@@ -589,7 +645,7 @@ done
     }
   });
 
-  app.put('/api/settings/api-keys', async (c) => {
+  app.put('/api/settings/api-keys', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const existing = (await cache.get('system_api_keys')) || {};
@@ -605,7 +661,7 @@ done
     }
   });
 
-  app.post('/api/settings/api-keys/test', async (c) => {
+  app.post('/api/settings/api-keys/test', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const { type, key } = body;
@@ -633,12 +689,32 @@ done
     }
   });
 
-  // Admin Auth Verify
+  // Admin Auth Verify - Checks JWT token or issues signed JWT on password match
+  app.get('/api/admin/verify', async (c) => {
+    const isAuthed = await verifyAdminAuth(c, env);
+    if (isAuthed) {
+      return c.json({ success: true, authenticated: true });
+    }
+    return c.json({ success: false, authenticated: false }, 401);
+  });
+
   app.post('/api/admin/verify', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await c.req.json().catch(() => ({}));
       const pass = body.password || '';
-      const envPass = env?.ADMIN_PASSWORD || (typeof process !== 'undefined' ? process.env?.ADMIN_PASSWORD : '');
+
+      // If no password provided, verify existing Authorization Bearer header
+      if (!pass) {
+        const isAuthed = await verifyAdminAuth(c, env);
+        if (isAuthed) {
+          const authHeader = c.req.header('Authorization') || '';
+          return c.json({ success: true, token: authHeader.slice(7).trim() });
+        }
+        return c.json({ success: false, error: '未登录或凭证已过期' }, 401);
+      }
+
+      const runtimeEnv = getEnv(c);
+      const envPass = runtimeEnv.ADMIN_PASSWORD;
       
       let storedPass: string | null = null;
       if (storage.getAdminPassword) {
@@ -658,10 +734,13 @@ done
       }
       const finalExpectedPass = storedPass || envPass || 'admin123';
 
-      const isValid = pass === finalExpectedPass || (finalExpectedPass === 'admin123' && pass === 'admin123');
+      const isValid = pass === finalExpectedPass;
 
       if (isValid) {
-        return c.json({ success: true, token: 'token-cloudpulse-admin-secure' });
+        const secret = getJwtSecret(c, env);
+        const exp = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7-day validity
+        const token = await sign({ role: 'admin', exp }, secret, 'HS256');
+        return c.json({ success: true, token });
       }
       return c.json({ success: false, error: '密码错误，请检查输入的管理员密码' }, 401);
     } catch (err: any) {
@@ -670,11 +749,12 @@ done
   });
 
   // Change Admin Password
-  app.put('/api/admin/password', async (c) => {
+  app.put('/api/admin/password', requireAdmin, async (c) => {
     try {
       const body = await c.req.json();
       const { oldPass, newPass } = body;
-      const envPass = env?.ADMIN_PASSWORD || (typeof process !== 'undefined' ? process.env?.ADMIN_PASSWORD : '');
+      const runtimeEnv = getEnv(c);
+      const envPass = runtimeEnv.ADMIN_PASSWORD;
       
       let storedPass: string | null = null;
       if (storage.getAdminPassword) {
@@ -715,7 +795,7 @@ done
   });
 
   // Manual Trigger Run Cycle
-  app.post('/api/monitor/run', async (c) => {
+  app.post('/api/monitor/run', requireAdmin, async (c) => {
     try {
       await runMonitorCycle(storage, cache);
       return c.json({ success: true, message: 'Monitor cycle completed.' });

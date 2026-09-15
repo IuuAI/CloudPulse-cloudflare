@@ -178,6 +178,9 @@ export class MemoryStorageAdapter implements StorageAdapter {
   }
 
   async pruneHistory(retentionDays: number): Promise<number> {
-    return 0;
+    const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
+    const initialLen = this.metricsHistory.length;
+    this.metricsHistory = this.metricsHistory.filter((m: any) => m.timestamp >= cutoff);
+    return initialLen - this.metricsHistory.length;
   }
 }

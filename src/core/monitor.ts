@@ -7,26 +7,44 @@ export async function runMonitorCycle(storage: StorageAdapter, cache: CacheAdapt
   const quota = await storage.getQuotaSettings();
   const tgConfig = await storage.getTelegramConfig();
 
-  // Simulate probe health checks
   let healthyCount = 0;
   let totalLatency = 0;
+  const now = Date.now();
+  const heartbeatSeconds = quota?.heartbeatIntervalSeconds || 60;
+  const offlineThresholdMs = Math.max(180, heartbeatSeconds * 3) * 1000;
 
+  // Real node health evaluation based on heartbeat freshness without random overwriting
   for (const node of nodes) {
-    const isDegraded = Math.random() < 0.05;
-    node.status = isDegraded ? 'degraded' : 'healthy';
-    node.cpu = Math.floor(20 + Math.random() * 45);
-    node.ram = Math.floor(40 + Math.random() * 30);
-    node.ping = Math.floor(15 + Math.random() * 50);
-    node.lastSeen = new Date().toISOString();
-    await storage.saveNode(node);
+    const lastSeenTime = node.lastSeen ? new Date(node.lastSeen).getTime() : 0;
+    const isStale = lastSeenTime > 0 && (now - lastSeenTime > offlineThresholdMs);
+
+    if (isStale) {
+      node.status = 'degraded';
+    } else if (!node.status) {
+      node.status = 'healthy';
+    }
+
     if (node.status === 'healthy') healthyCount++;
-    totalLatency += node.ping;
+    totalLatency += (node.ping || 20);
+    await storage.saveNode(node);
   }
 
+  // Real service health evaluation (probe HTTP/HTTPS url if configured, otherwise preserve state)
   for (const s of services) {
-    const isDown = Math.random() < 0.02;
-    s.status = isDown ? 'degraded' : 'operational';
-    s.latency = Math.floor(20 + Math.random() * 80);
+    if (s.url && (s.url.startsWith('http://') || s.url.startsWith('https://'))) {
+      try {
+        const t0 = Date.now();
+        const probeRes = await fetch(s.url, { 
+          method: 'HEAD', 
+          signal: AbortSignal.timeout(5000) 
+        });
+        s.latency = Date.now() - t0;
+        s.status = (!probeRes.ok && probeRes.status >= 500) ? 'degraded' : 'operational';
+      } catch {
+        s.status = 'degraded';
+        s.latency = 999;
+      }
+    }
     s.lastCheck = new Date().toISOString();
     await storage.saveService(s);
   }
@@ -46,13 +64,13 @@ export async function runMonitorCycle(storage: StorageAdapter, cache: CacheAdapt
   };
   await storage.saveOverview(overview);
 
-  // Append metric history point
-  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const avgCpu = Math.round(nodes.reduce((acc, n) => acc + n.cpu, 0) / (nodes.length || 1));
-  const avgRam = Math.round(nodes.reduce((acc, n) => acc + n.ram, 0) / (nodes.length || 1));
+  // Append metric history point with standard ISO 8601 timestamp for proper retention pruning
+  const isoTimestamp = new Date().toISOString();
+  const avgCpu = Math.round(nodes.reduce((acc, n) => acc + (n.cpu || 0), 0) / (nodes.length || 1));
+  const avgRam = Math.round(nodes.reduce((acc, n) => acc + (n.ram || 0), 0) / (nodes.length || 1));
   
   await storage.saveMetricPoint({
-    timestamp: timeStr,
+    timestamp: isoTimestamp,
     avgLatency,
     cpuLoad: avgCpu,
     ramLoad: avgRam,
