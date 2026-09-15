@@ -7,7 +7,11 @@ import { sendTelegramNotification } from '../adapters/notifications/TelegramNoti
 
 function getJwtSecret(c: any, defaultEnv?: any): string {
   const runtimeEnv = (c.env as any) || defaultEnv || (typeof process !== 'undefined' ? process.env : {});
-  return runtimeEnv.JWT_SECRET || runtimeEnv.ADMIN_PASSWORD || 'cloudpulse-edge-jwt-secret-key-2026';
+  const secret = runtimeEnv.JWT_SECRET || runtimeEnv.ADMIN_PASSWORD;
+  if (!secret || typeof secret !== 'string' || secret.trim() === '') {
+    throw new Error('服务端未配置 JWT_SECRET 或 ADMIN_PASSWORD 环境变量，无法进行 JWT 签发与验证。');
+  }
+  return secret;
 }
 
 async function verifyAdminAuth(c: any, defaultEnv?: any): Promise<boolean> {
@@ -344,6 +348,11 @@ INTERVAL=${interval}
 
 echo "[CloudPulse] Probe agent starting... reporting to $SERVER_URL every $INTERVAL s"
 
+# Test mode if --test argument passed
+if [ "$1" = "--test" ]; then
+  echo "[CloudPulse] Running single test report..."
+fi
+
 while true; do
   CPU_USAGE=$(grep 'cpu ' /proc/stat 2>/dev/null | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.0f", usage}')
   [ -z "$CPU_USAGE" ] && CPU_USAGE=$((15 + RANDOM % 30))
@@ -354,9 +363,22 @@ while true; do
   DISK_USAGE=$(df -h / 2>/dev/null | awk 'NR==2 {gsub("%",""); print $5}')
   [ -z "$DISK_USAGE" ] && DISK_USAGE=45
 
-  curl -s -X POST "$SERVER_URL/api/probe/report" \\
+  RESPONSE=\$(curl -s -w "\\n%{http_code}" -X POST "$SERVER_URL/api/probe/report" \\
     -H "Content-Type: application/json" \\
-    -d "{\\"token\\":\\"$TOKEN\\",\\"cpu\\":$CPU_USAGE,\\"ram\\":$RAM_USAGE,\\"disk\\":$DISK_USAGE,\\"ping\\":18}" > /dev/null 2>&1
+    -d "{\\"token\\":\\"$TOKEN\\",\\"cpu\\":$CPU_USAGE,\\"ram\\":$RAM_USAGE,\\"disk\\":$DISK_USAGE,\\"ping\\":18}")
+
+  HTTP_CODE=\$(echo "$RESPONSE" | tail -n1)
+  BODY=\$(echo "$RESPONSE" | sed '$d')
+
+  if [ "$HTTP_CODE" = "200" ]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ✅ Telemetry reported successfully (CPU: \${CPU_USAGE}%, RAM: \${RAM_USAGE}%, Disk: \${DISK_USAGE}%)"
+  else
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ❌ Failed to report telemetry to $SERVER_URL (HTTP \${HTTP_CODE:-0}): $BODY"
+  fi
+
+  if [ "$1" = "--test" ]; then
+    exit 0
+  fi
 
   sleep $INTERVAL
 done

@@ -82,9 +82,6 @@ export async function runMonitorCycle(storage: StorageAdapter, cache: CacheAdapt
     await storage.pruneHistory(quota.historyRetentionDays);
   }
 
-  // Cache latest overview for instant retrieval
-  await cache.set('latest_overview', overview, 60);
-
   // Send Telegram notification if high load or status changed
   if (tgConfig.enabled && tgConfig.botToken && tgConfig.chatId) {
     if (avgCpu > 85 && tgConfig.alertOnHighLoad) {
