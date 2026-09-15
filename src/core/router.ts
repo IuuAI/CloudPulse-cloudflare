@@ -8,10 +8,46 @@ import { sendTelegramNotification } from '../adapters/notifications/TelegramNoti
 function getMergedEnv(c: any): Record<string, any> {
   const procEnv = (typeof process !== 'undefined' && process.env) ? process.env : {};
   const cEnv = (c && c.env && typeof c.env === 'object') ? c.env : {};
-  return {
+  const merged = {
     ...procEnv,
     ...cEnv,
   };
+
+  // Case-insensitive & alias check for ADMIN_PASSWORD
+  let adminPass = merged.ADMIN_PASSWORD || merged.admin_password || merged.AdminPassword;
+  if (!adminPass) {
+    for (const [k, v] of Object.entries(merged)) {
+      const upper = k.toUpperCase();
+      if (upper === 'ADMIN_PASSWORD' || upper === 'ADMIN_PASS' || upper === 'PASSWORD' || upper === 'ADMIN_SECRET') {
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+          adminPass = String(v);
+          break;
+        }
+      }
+    }
+  }
+  if (adminPass) {
+    merged.ADMIN_PASSWORD = adminPass;
+  }
+
+  // Case-insensitive & alias check for JWT_SECRET
+  let jwtSecret = merged.JWT_SECRET || merged.jwt_secret || merged.JwtSecret;
+  if (!jwtSecret) {
+    for (const [k, v] of Object.entries(merged)) {
+      const upper = k.toUpperCase();
+      if (upper.includes('JWT') || upper.includes('SECRET')) {
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+          jwtSecret = String(v);
+          break;
+        }
+      }
+    }
+  }
+  if (jwtSecret) {
+    merged.JWT_SECRET = jwtSecret;
+  }
+
+  return merged;
 }
 
 function getJwtSecret(c: any): string {
