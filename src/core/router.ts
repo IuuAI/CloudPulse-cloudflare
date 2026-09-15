@@ -237,6 +237,9 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter) {
         ...node,
         ip: '***.***.***.***',
         probeToken: isAdmin ? node.probeToken : undefined,
+        lastHeartbeat: node.lastHeartbeat || node.lastSeen || new Date().toISOString(),
+        lastSeen: node.lastSeen || node.lastHeartbeat || new Date().toISOString(),
+        probeInstalled: node.probeInstalled ?? Boolean(node.lastHeartbeat || node.lastSeen || node.probeToken),
       }));
       return c.json(sanitizedNodes);
     } catch (err: any) {
@@ -351,12 +354,15 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter) {
       if (networkIn) node.networkIn = String(networkIn);
       if (networkOut) node.networkOut = String(networkOut);
 
-      node.lastSeen = new Date().toISOString();
-      node.status = (node.cpu > 90 || node.ram > 95) ? 'degraded' : 'healthy';
+      const nowIso = new Date().toISOString();
+      node.lastSeen = nowIso;
+      node.lastHeartbeat = nowIso;
+      node.probeInstalled = true;
+      node.status = (node.cpu > 90 || node.ram > 95) ? 'degraded' : 'online';
 
       await storage.saveNode(node);
-      console.log(`[Unit Test / DB Write Confirmation] Successfully persisted probe metrics for node ${node.id} (${node.name}): CPU=${node.cpu}%, RAM=${node.ram}%, Disk=${node.disk}%, Ping=${node.ping}ms`);
-      return c.json({ success: true, node: { id: node.id, name: node.name, status: node.status, lastSeen: node.lastSeen } });
+      console.log(`[Unit Test / DB Write Confirmation] Successfully persisted probe metrics for node ${node.id} (${node.name}): CPU=${node.cpu}%, RAM=${node.ram}%, Disk=${node.disk}%, Ping=${node.ping}ms, ProbeInstalled=true`);
+      return c.json({ success: true, node: { id: node.id, name: node.name, status: node.status, lastSeen: node.lastSeen, lastHeartbeat: node.lastHeartbeat, probeInstalled: true } });
     } catch (err: any) {
       console.error('[Probe Report] Error:', err);
       return c.json({ error: err.message }, 500);

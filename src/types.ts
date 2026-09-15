@@ -69,6 +69,7 @@ export interface ServerNode {
   uptime: string;
   os: string;
   lastHeartbeat: string;
+  lastSeen?: string;
   tags: string[];
   probeToken: string;
   probeInstalled?: boolean;

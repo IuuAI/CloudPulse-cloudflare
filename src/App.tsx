@@ -144,7 +144,8 @@ const fallbackNodes: ServerNode[] = [
     os: 'Ubuntu 24.04 LTS (x86_64)',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Asia', 'Edge', 'Gateway'],
-    probeToken: '',
+    probeToken: 'tok-tokyo-01',
+    probeInstalled: true,
     flagEmoji: '🇯🇵',
   },
   {
@@ -163,7 +164,8 @@ const fallbackNodes: ServerNode[] = [
     os: 'Debian 12 Bookworm',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Europe', 'Core', 'Cluster'],
-    probeToken: '',
+    probeToken: 'tok-fra-01',
+    probeInstalled: true,
     flagEmoji: '🇩🇪',
   },
   {
@@ -182,7 +184,8 @@ const fallbackNodes: ServerNode[] = [
     os: 'Alpine Linux 3.20',
     lastHeartbeat: new Date().toISOString(),
     tags: ['US-West', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-sjc-01',
+    probeInstalled: true,
     flagEmoji: '🇺🇸',
   },
   {
@@ -201,7 +204,8 @@ const fallbackNodes: ServerNode[] = [
     os: 'Ubuntu 24.04 LTS',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Asia-SE', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-sin-01',
+    probeInstalled: true,
     flagEmoji: '🇸🇬',
   },
   {
@@ -220,7 +224,8 @@ const fallbackNodes: ServerNode[] = [
     os: 'Debian 12',
     lastHeartbeat: new Date().toISOString(),
     tags: ['SA', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-sao-01',
+    probeInstalled: true,
     flagEmoji: '🇧🇷',
   },
   {
@@ -239,7 +244,8 @@ const fallbackNodes: ServerNode[] = [
     os: 'Ubuntu 24.04 LTS',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Oceania', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-syd-01',
+    probeInstalled: true,
     flagEmoji: '🇦🇺',
   },
 ];

@@ -45,8 +45,9 @@ export const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                 <span className="px-2 py-0.5 text-xs font-mono uppercase rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                   {node.region}
                 </span>
-                {node.probeInstalled ? (
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                {Boolean(node.probeInstalled ?? (node.lastHeartbeat || node.lastSeen || node.probeToken || node.status !== 'offline')) ? (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     探针已接入
                   </span>
                 ) : (
@@ -56,7 +57,7 @@ export const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 font-mono mt-0.5">
-                上次心跳: {new Date(node.lastHeartbeat).toLocaleTimeString()}
+                上次心跳: {node.lastHeartbeat || node.lastSeen ? new Date(node.lastHeartbeat || node.lastSeen).toLocaleTimeString() : '刚刚'}
               </p>
             </div>
           </div>

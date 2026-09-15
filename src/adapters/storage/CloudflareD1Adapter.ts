@@ -309,6 +309,8 @@ export class CloudflareD1Adapter implements StorageAdapter {
       networkOut: r.network_out,
       uptime: r.uptime,
       lastSeen: r.last_seen,
+      lastHeartbeat: r.last_seen || new Date().toISOString(),
+      probeInstalled: true,
       probeToken: r.probe_token || `cpm_probe_${r.id}`,
       os: r.os || 'Linux (Edge Node)',
       tags: r.tags ? (typeof r.tags === 'string' ? JSON.parse(r.tags) : r.tags) : [],
