@@ -109,7 +109,7 @@ export class MemoryStorageAdapter implements StorageAdapter {
   }
 
   async getMetricsHistory(): Promise<any[]> {
-    return [...this.metricsHistory];
+    return this.metricsHistory.slice(-200);
   }
 
   async saveMetricPoint(point: any): Promise<void> {
@@ -146,16 +146,6 @@ export class MemoryStorageAdapter implements StorageAdapter {
     this.quotaSettings = { ...this.quotaSettings, ...settings };
   }
 
-  private adminPassword = 'admin123';
-
-  async getAdminPassword(): Promise<string> {
-    return this.adminPassword;
-  }
-
-  async saveAdminPassword(password: string): Promise<void> {
-    this.adminPassword = password;
-  }
-
   async getD1UsageStats(): Promise<any> {
     const readLimit = 5000000;
     const writeLimit = 100000;
@@ -180,7 +170,9 @@ export class MemoryStorageAdapter implements StorageAdapter {
   async pruneHistory(retentionDays: number): Promise<number> {
     const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
     const initialLen = this.metricsHistory.length;
-    this.metricsHistory = this.metricsHistory.filter((m: any) => m.timestamp >= cutoff);
+    this.metricsHistory = this.metricsHistory.filter(
+      (m: any) => typeof m.timestamp === 'string' && /^\d{4}-\d{2}-\d{2}/.test(m.timestamp) && m.timestamp >= cutoff
+    );
     return initialLen - this.metricsHistory.length;
   }
 }

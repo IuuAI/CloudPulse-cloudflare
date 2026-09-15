@@ -276,19 +276,21 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  // Probe Heartbeat Report Ingest Endpoint (authenticated via probe token)
+  // Probe Heartbeat Report Ingest Endpoint (authenticated strictly via probe token)
   app.post('/api/probe/report', async (c) => {
     try {
       const body = await c.req.json();
       const { token, cpu, ram, disk, ping, networkIn, networkOut } = body;
-      if (!token) {
-        return c.json({ error: 'Missing probe token' }, 400);
+      if (!token || typeof token !== 'string' || token.trim().length === 0) {
+        return c.json({ error: 'Missing or invalid probe token' }, 400);
       }
 
+      const trimmedToken = token.trim();
       const nodes = await storage.getNodes();
-      const node = nodes.find((n: any) => n.probeToken === token || n.id === token);
+      // 严格认证：仅允许匹配节点预置的独立 probeToken，移除节点 ID 认证旁路
+      const node = nodes.find((n: any) => n.probeToken && n.probeToken === trimmedToken);
       if (!node) {
-        return c.json({ error: 'Invalid probe token or node not found' }, 404);
+        return c.json({ error: 'Invalid probe token or node not found' }, 403);
       }
 
       if (typeof cpu === 'number') node.cpu = Math.max(0, Math.min(100, Math.round(cpu)));
@@ -308,18 +310,36 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     }
   });
 
-  // Generate One-Click Bash Probe Script
+  // Generate One-Click Bash Probe Script (with strict parameter whitelist)
   app.get('/api/probe/script', (c) => {
-    const token = c.req.query('token') || '';
-    const interval = Number(c.req.query('interval')) || 60;
+    const rawToken = (c.req.query('token') || '').trim();
+    // 严格限制 Token 字符集，防范 Bash 注入
+    if (!rawToken || !/^[a-zA-Z0-9_-]{8,128}$/.test(rawToken)) {
+      return c.text('#!/bin/bash\necho "Error: Invalid or missing probe token parameter." >&2\nexit 1\n', 400, {
+        'Content-Type': 'text/plain; charset=utf-8',
+      });
+    }
+
+    const rawInterval = c.req.query('interval');
+    let interval = 60;
+    if (rawInterval !== undefined) {
+      const parsed = Math.floor(Number(rawInterval));
+      if (!Number.isFinite(parsed) || parsed < 10 || parsed > 86400) {
+        return c.text('#!/bin/bash\necho "Error: Invalid interval. Must be an integer between 10 and 86400 seconds." >&2\nexit 1\n', 400, {
+          'Content-Type': 'text/plain; charset=utf-8',
+        });
+      }
+      interval = parsed;
+    }
+
     const url = new URL(c.req.url);
     const host = `${url.protocol}//${url.host}`;
 
     const script = `#!/bin/bash
 # CloudPulse Edge Monitor Probe Agent
-# Generated for Token: ${token}
+# Generated for Token: ${rawToken}
 SERVER_URL="${host}"
-TOKEN="${token}"
+TOKEN="${rawToken}"
 INTERVAL=${interval}
 
 echo "[CloudPulse] Probe agent starting... reporting to $SERVER_URL every $INTERVAL s"
@@ -460,14 +480,20 @@ done
     }
   });
 
-  // Telegram Config & Logs
-  app.get('/api/telegram/config', async (c) => {
+  // Telegram Config & Logs (Admin authenticated only, botToken fully protected)
+  app.get('/api/telegram/config', requireAdmin, async (c) => {
     try {
       const cfg = await storage.getTelegramConfig();
       return c.json({
-        ...cfg,
+        enabled: !!cfg.enabled,
+        chatId: cfg.chatId || '',
+        alertOnStatusChange: cfg.alertOnStatusChange !== undefined ? !!cfg.alertOnStatusChange : true,
+        alertOnHighLoad: cfg.alertOnHighLoad !== undefined ? !!cfg.alertOnHighLoad : true,
+        alertOnIncident: cfg.alertOnIncident !== undefined ? !!cfg.alertOnIncident : true,
+        dailyDigest: !!cfg.dailyDigest,
+        digestTime: cfg.digestTime || '08:00',
         hasBotToken: !!cfg.botToken,
-        botTokenPreview: cfg.botToken ? `${cfg.botToken.slice(0, 6)}...${cfg.botToken.slice(-4)}` : ''
+        botTokenPreview: cfg.botToken ? `${cfg.botToken.slice(0, 6)}...${cfg.botToken.slice(-4)}` : '',
       });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
@@ -484,13 +510,26 @@ done
         botToken: body.botToken !== undefined ? body.botToken : current.botToken
       };
       await storage.saveTelegramConfig(updated);
-      return c.json({ success: true, config: updated });
+      return c.json({ 
+        success: true, 
+        config: {
+          enabled: !!updated.enabled,
+          chatId: updated.chatId || '',
+          alertOnStatusChange: updated.alertOnStatusChange !== undefined ? !!updated.alertOnStatusChange : true,
+          alertOnHighLoad: updated.alertOnHighLoad !== undefined ? !!updated.alertOnHighLoad : true,
+          alertOnIncident: updated.alertOnIncident !== undefined ? !!updated.alertOnIncident : true,
+          dailyDigest: !!updated.dailyDigest,
+          digestTime: updated.digestTime || '08:00',
+          hasBotToken: !!updated.botToken,
+          botTokenPreview: updated.botToken ? `${updated.botToken.slice(0, 6)}...${updated.botToken.slice(-4)}` : '',
+        }
+      });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
   });
 
-  app.get('/api/telegram/logs', async (c) => {
+  app.get('/api/telegram/logs', requireAdmin, async (c) => {
     try {
       const logs = await storage.getTelegramLogs();
       return c.json(logs);
@@ -714,27 +753,17 @@ done
       }
 
       const runtimeEnv = getEnv(c);
-      const envPass = runtimeEnv.ADMIN_PASSWORD;
-      
-      let storedPass: string | null = null;
-      if (storage.getAdminPassword) {
-        try {
-          storedPass = await storage.getAdminPassword();
-        } catch (e) {
-          console.warn('Failed to read admin password from storage:', e);
-        }
-      }
-      if (!storedPass || storedPass === 'admin123') {
-        try {
-          const kvPass = await cache.get('admin_password');
-          if (kvPass) storedPass = kvPass;
-        } catch (e) {
-          console.warn('Failed to read admin password from cache:', e);
-        }
-      }
-      const finalExpectedPass = storedPass || envPass || 'admin123';
+      const configuredPass = runtimeEnv.ADMIN_PASSWORD;
 
-      const isValid = pass === finalExpectedPass;
+      // 舍弃硬编码默认密码，必须通过 Cloudflare 环境变量/Secrets 设置
+      if (!configuredPass || typeof configuredPass !== 'string' || configuredPass.trim() === '') {
+        return c.json({ 
+          success: false, 
+          error: '服务端未配置 ADMIN_PASSWORD 环境变量。请在 Cloudflare 控制台添加环境变量，或执行 wrangler secret put ADMIN_PASSWORD。' 
+        }, 503);
+      }
+
+      const isValid = pass === configuredPass;
 
       if (isValid) {
         const secret = getJwtSecret(c, env);
@@ -743,52 +772,6 @@ done
         return c.json({ success: true, token });
       }
       return c.json({ success: false, error: '密码错误，请检查输入的管理员密码' }, 401);
-    } catch (err: any) {
-      return c.json({ error: err.message }, 500);
-    }
-  });
-
-  // Change Admin Password
-  app.put('/api/admin/password', requireAdmin, async (c) => {
-    try {
-      const body = await c.req.json();
-      const { oldPass, newPass } = body;
-      const runtimeEnv = getEnv(c);
-      const envPass = runtimeEnv.ADMIN_PASSWORD;
-      
-      let storedPass: string | null = null;
-      if (storage.getAdminPassword) {
-        try {
-          storedPass = await storage.getAdminPassword();
-        } catch (e) {
-          console.warn('Failed to read admin password from storage:', e);
-        }
-      }
-      if (!storedPass || storedPass === 'admin123') {
-        try {
-          const kvPass = await cache.get('admin_password');
-          if (kvPass) storedPass = kvPass;
-        } catch (e) {
-          console.warn('Failed to read admin password from cache:', e);
-        }
-      }
-      const finalExpectedPass = storedPass || envPass || 'admin123';
-      
-      const isOldValid = oldPass === finalExpectedPass;
-
-      if (!isOldValid) {
-        return c.json({ success: false, error: '原密码错误' }, 400);
-      }
-
-      if (!newPass || newPass.length < 4) {
-        return c.json({ success: false, error: '新密码长度至少为 4 位' }, 400);
-      }
-
-      if (storage.saveAdminPassword) {
-        await storage.saveAdminPassword(newPass);
-      }
-      await cache.set('admin_password', newPass);
-      return c.json({ success: true, message: '密码修改成功' });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }

@@ -273,19 +273,23 @@ export async function verifyAdminAuth(password?: string): Promise<boolean> {
   return false;
 }
 export async function adminLogin(password: string): Promise<any> {
-  const verified = await verifyAdminAuth(password);
-  if (!verified) throw new Error('Invalid password');
-  return { success: true, token: localStorage.getItem('cloudpulse_admin_token') };
+  const res = await fetch('/api/admin/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || '登录失败，请检查管理员密码');
+  }
+  if (data.token) {
+    localStorage.setItem('cloudpulse_admin_token', data.token);
+  }
+  return { success: true, token: data.token };
 }
 
 export async function adminLogout(): Promise<void> {
   localStorage.removeItem('cloudpulse_admin_token');
-}
-
-export async function changeAdminPassword(oldPass: string, newPass: string): Promise<any> {
-  const res = await fetch('/api/admin/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPass, newPass }) });
-  if (!res.ok) throw new Error('Failed to change password');
-  return res.json();
 }
 
 export async function createService(data: any): Promise<any> {

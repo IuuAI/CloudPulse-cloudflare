@@ -1,4 +1,4 @@
-name = "cloudpulse"
+name = "cloudpulse-cloudflare-api"
 main = "worker/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
@@ -17,6 +17,6 @@ database_id = "0d30d27f-01db-4c20-b23f-d6940677675c"
 binding = "CACHE"
 id = "1343621be8b64badb66b8ad1f35dea7a"
 
-# 3. 每分钟定时巡检探活与告警 Cron Trigger
+# 3. 每 30 分钟定时巡检探活与告警 Cron Trigger
 [triggers]
-crons = ["* * * * *"]
+crons = ["*/30 * * * *"]

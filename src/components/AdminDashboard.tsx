@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ShieldCheck,
+  Shield,
   Server,
   Activity,
   AlertTriangle,
@@ -55,7 +56,6 @@ import {
 import {
   adminLogin,
   adminLogout,
-  changeAdminPassword,
   createService,
   updateService,
   deleteService,
@@ -150,11 +150,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [updateStatus, setUpdateStatus] = useState<Incident['status']>('investigating');
   const [updateMessage, setUpdateMessage] = useState('');
 
-  // Change Password State
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [isChangingPass, setIsChangingPass] = useState(false);
-
   // Loading states
   const [simulatingNodeId, setSimulatingNodeId] = useState<string | null>(null);
 
@@ -182,26 +177,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     await adminLogout();
     onAuthChange({ isAuthenticated: false });
     onShowToast('info', '已退出登录', '后台管理员会话已终止。');
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!oldPassword || !newPassword) return;
-    setIsChangingPass(true);
-    try {
-      const res = await changeAdminPassword(oldPassword, newPassword);
-      if (res.success) {
-        onShowToast('success', '密码修改成功', '请牢记您的新管理员密码。');
-        setOldPassword('');
-        setNewPassword('');
-      } else {
-        onShowToast('error', '修改失败', res.error || '原密码错误');
-      }
-    } catch (err: any) {
-      onShowToast('error', '修改失败', err.message);
-    } finally {
-      setIsChangingPass(false);
-    }
   };
 
   // Node Actions
@@ -409,6 +384,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full text-xs px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
+              <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1.5">
+                <Shield className="w-3 h-3 text-sky-500 shrink-0" />
+                <span>密码由 Cloudflare 环境变量 ADMIN_PASSWORD 提供保护</span>
+              </p>
             </div>
 
 
@@ -551,7 +530,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Key className="w-3.5 h-3.5" />
-          <span>安全与密码设置</span>
+          <span>安全凭据与系统维护</span>
         </button>
 
         <button
@@ -1689,48 +1668,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Key className="w-4 h-4 text-sky-500" />
-              <span>安全访问凭据与系统维护</span>
+              <span>管理员安全凭据管理</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              修改 Web 后台管理员访问密码或复位系统数据
+              密码已全量托管至 Cloudflare 环境变量，已弃用默认密码与前端改密
             </p>
           </div>
 
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                原管理密码
-              </label>
-              <input
-                type="password"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                placeholder="请输入当前密码"
-                className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
-              />
+          <div className="p-4 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200/60 dark:border-sky-900/40 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-sky-900 dark:text-sky-300">
+              <Shield className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+              <span>Cloudflare 环境变量/Secrets 保护机制</span>
             </div>
+            <p className="text-xs text-sky-800 dark:text-sky-300/90 leading-relaxed">
+              为杜绝默认弱口令（如 <code>admin123</code>）泄露与数据库持久化明文凭据的安全隐患，系统已舍弃默认密码与 Web 界面改密功能。当前后台密码完全由 Cloudflare Worker 环境变量 <code>ADMIN_PASSWORD</code> 提供零信任校验。
+            </p>
+          </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                新管理密码 (至少 6 位字符)
-              </label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="请输入新安全密码"
-                className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
-              />
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              如何设置或修改管理员密码：
+            </h4>
+            
+            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
+              <div className="p-3 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] flex items-center justify-between">
+                <span>wrangler secret put ADMIN_PASSWORD</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText('wrangler secret put ADMIN_PASSWORD');
+                    onShowToast('success', '已复制 CLI 命令', '在终端运行即可交互式输入新密码。');
+                  }}
+                  className="text-sky-400 hover:text-sky-300 text-xs px-2 py-0.5 rounded bg-slate-800 transition-colors"
+                >
+                  复制
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                <b>或在 Cloudflare 控制台配置：</b>
+                <br />
+                访问 <i>Cloudflare Dashboard → Workers &amp; Pages → cloudpulse-cloudflare-api → 设置 → 变量和机密 (Variables and Secrets)</i>，添加或编辑机密 <code>ADMIN_PASSWORD</code> 即可立即生效，无需重新构建。
+              </p>
             </div>
-
-            <button
-              type="submit"
-              disabled={isChangingPass || !oldPassword || !newPassword}
-              className="px-5 py-2 text-xs font-semibold rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-xs transition-colors disabled:opacity-50"
-            >
-              {isChangingPass ? '正在更新密码...' : '确认更新管理员密码'}
-            </button>
-          </form>
+          </div>
 
           <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
             <h4 className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">
