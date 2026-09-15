@@ -1,15 +1,29 @@
 /// <reference types="@cloudflare/workers-types" />
-import { StorageAdapter } from '../../core/types';
+import { StorageAdapter, CloudflareD1UsageStats } from '../../core/types';
 
 export class CloudflareD1Adapter implements StorageAdapter {
   private initialized = false;
+  private rowsReadSession = 0;
+  private rowsWrittenSession = 0;
 
   constructor(private db?: D1Database) {}
+
+  public async initialize(): Promise<void> {
+    await this.ensureInitialized();
+  }
 
   private checkBinding() {
     if (!this.db) {
       throw new Error("Cloudflare D1 database binding 'DB' is not configured. Please bind your D1 database with variable name 'DB' in Cloudflare Pages / Workers settings or wrangler.toml.");
     }
+  }
+
+  private recordRead(rows: number = 1) {
+    this.rowsReadSession += Math.max(1, rows);
+  }
+
+  private recordWrite(rows: number = 1) {
+    this.rowsWrittenSession += Math.max(1, rows);
   }
 
   private async ensureInitialized() {
@@ -106,6 +120,12 @@ export class CloudflareD1Adapter implements StorageAdapter {
         `CREATE TABLE IF NOT EXISTS admin_settings (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           admin_password TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS d1_daily_stats (
+          date TEXT PRIMARY KEY,
+          rows_read INTEGER NOT NULL DEFAULT 0,
+          rows_written INTEGER NOT NULL DEFAULT 0,
+          last_updated TEXT NOT NULL
         )`
       ];
 
@@ -392,6 +412,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async getAdminPassword(): Promise<string> {
     await this.ensureInitialized();
+    this.recordRead(1);
     const { results } = await this.db!.prepare("SELECT admin_password FROM admin_settings WHERE id = 1").all();
     if (!results || results.length === 0) return 'admin123';
     return (results[0] as any).admin_password || 'admin123';
@@ -399,11 +420,82 @@ export class CloudflareD1Adapter implements StorageAdapter {
 
   async saveAdminPassword(password: string): Promise<void> {
     await this.ensureInitialized();
+    this.recordWrite(1);
     await this.db!.prepare(`
       INSERT INTO admin_settings (id, admin_password)
       VALUES (1, ?)
       ON CONFLICT(id) DO UPDATE SET admin_password = excluded.admin_password
     `).bind(password).run();
+  }
+
+  async getD1UsageStats(): Promise<CloudflareD1UsageStats> {
+    await this.ensureInitialized();
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // 1. Calculate row counts and table counts
+    let totalRows = 0;
+    let tableCount = 10;
+    try {
+      const tablesRes = await this.db!.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").all();
+      const tables = tablesRes.results || [];
+      if (tables.length > 0) {
+        tableCount = tables.length;
+        for (const tbl of tables) {
+          try {
+            const cnt = await this.db!.prepare(`SELECT COUNT(*) as c FROM "${(tbl as any).name}"`).first() as any;
+            totalRows += Number(cnt?.c || 0);
+          } catch {}
+        }
+      }
+    } catch {}
+
+    // 2. Storage size estimation or via PRAGMA
+    let storageBytes = 0;
+    try {
+      const pageCountRes = await this.db!.prepare("PRAGMA page_count").first() as any;
+      const pageSizeRes = await this.db!.prepare("PRAGMA page_size").first() as any;
+      const pageCount = Number(pageCountRes?.page_count || 0);
+      const pageSize = Number(pageSizeRes?.page_size || 4096);
+      if (pageCount > 0) {
+        storageBytes = pageCount * pageSize;
+      }
+    } catch {}
+
+    if (storageBytes === 0) {
+      storageBytes = 64 * 1024 + totalRows * 360;
+    }
+
+    // 3. Daily read/write tracking persisted in d1_daily_stats
+    let dailyRowsRead = Math.max(this.rowsReadSession, 1);
+    let dailyRowsWritten = Math.max(this.rowsWrittenSession, 1);
+
+    try {
+      const existing = await this.db!.prepare("SELECT rows_read, rows_written FROM d1_daily_stats WHERE date = ?").bind(today).first() as any;
+      if (existing) {
+        dailyRowsRead += Number(existing.rows_read || 0);
+        dailyRowsWritten += Number(existing.rows_written || 0);
+      } else {
+        await this.db!.prepare("INSERT OR IGNORE INTO d1_daily_stats (date, rows_read, rows_written, last_updated) VALUES (?, ?, ?, ?)").bind(today, dailyRowsRead, dailyRowsWritten, new Date().toISOString()).run();
+      }
+    } catch {}
+
+    const readLimit = 5000000; // 5 Million rows read / day (Free Tier)
+    const writeLimit = 100000; // 100,000 rows written / day (Free Tier)
+    const storageLimitBytes = 5 * 1024 * 1024 * 1024; // 5 GB Free Tier
+
+    return {
+      dailyRowsRead,
+      readLimit,
+      dailyRowsWritten,
+      writeLimit,
+      storageBytes,
+      storageLimitBytes,
+      totalTables: tableCount,
+      totalRows,
+      readUsagePercent: Math.min(100, Math.round((dailyRowsRead / readLimit) * 10000) / 100),
+      writeUsagePercent: Math.min(100, Math.round((dailyRowsWritten / writeLimit) * 10000) / 100),
+      storageUsagePercent: Math.min(100, Math.round((storageBytes / storageLimitBytes) * 10000) / 100),
+    };
   }
 
   async pruneHistory(retentionDays: number): Promise<number> {

@@ -289,7 +289,6 @@ export default function App() {
     const text =
 `🖥 <b>【服务器节点健康报表】</b>
 <b>节点:</b> ${node.name} (${node.region})
-<b>公网IP:</b> ${node.ip}
 <b>当前状态:</b> ${node.status.toUpperCase()}
 <b>CPU:</b> ${node.cpu}% | <b>RAM:</b> ${node.ram}% | <b>磁盘:</b> ${node.disk}%
 <b>Ping:</b> ${node.ping}ms | <b>入网:</b> ${node.networkIn}

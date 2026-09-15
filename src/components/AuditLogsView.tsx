@@ -142,7 +142,7 @@ export const AuditLogsView: React.FC<AuditLogsViewProps> = ({ onShowToast }) => 
                     <div className="flex items-center gap-1 font-medium">
                       <User className="w-3 h-3 text-slate-400" />
                       <span>{item.actor}</span>
-                      <span className="text-slate-400 text-[11px] font-mono">({item.ip || '127.0.0.1'})</span>
+                      <span className="text-slate-400 text-[11px] font-mono">(***.***.***.***)</span>
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400">

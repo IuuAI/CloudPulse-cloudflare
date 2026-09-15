@@ -148,7 +148,12 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
   app.get('/api/nodes', async (c) => {
     try {
       const nodes = await storage.getNodes();
-      return c.json(nodes);
+      // Hide public IP for servers and probes to protect node infrastructure
+      const sanitizedNodes = (nodes || []).map((node: any) => ({
+        ...node,
+        ip: '***.***.***.***',
+      }));
+      return c.json(sanitizedNodes);
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
@@ -161,7 +166,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
         id: body.id || `n-${Date.now()}`,
         name: body.name || '新探针节点',
         region: body.region || 'Asia (Tokyo)',
-        ip: body.ip || '104.18.32.1',
+        ip: body.ip || '***.***.***.***',
         status: body.status || 'healthy',
         cpu: body.cpu || Math.floor(Math.random() * 30) + 10,
         ram: body.ram || Math.floor(Math.random() * 30) + 20,
@@ -480,11 +485,47 @@ done
     }
   });
 
-  // Quota Settings
+  // Quota Settings & Usage
   app.get('/api/settings/quota', async (c) => {
     try {
       const settings = await storage.getQuotaSettings();
-      return c.json(settings);
+      const d1Usage = storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined;
+      const kvUsage = cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined;
+      return c.json({
+        ...settings,
+        d1Usage,
+        kvUsage
+      });
+    } catch (err: any) {
+      return c.json({ error: err.message }, 500);
+    }
+  });
+
+  app.get('/api/settings/quota/usage', async (c) => {
+    try {
+      const d1Usage = storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined;
+      const kvUsage = cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined;
+      return c.json({
+        success: true,
+        d1Usage,
+        kvUsage
+      });
+    } catch (err: any) {
+      return c.json({ error: err.message }, 500);
+    }
+  });
+
+  // Cloudflare D1 & KV Daily Usage
+  app.get('/api/cloudflare/daily-usage', async (c) => {
+    try {
+      const d1Usage = storage.getD1UsageStats ? await storage.getD1UsageStats() : undefined;
+      const kvUsage = cache.getKVUsageStats ? await cache.getKVUsageStats() : undefined;
+      return c.json({
+        success: true,
+        timestamp: new Date().toISOString(),
+        d1Usage,
+        kvUsage,
+      });
     } catch (err: any) {
       return c.json({ error: err.message }, 500);
     }
@@ -597,19 +638,27 @@ done
     try {
       const body = await c.req.json();
       const pass = body.password || '';
-      const envPass = env?.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+      const envPass = env?.ADMIN_PASSWORD || (typeof process !== 'undefined' ? process.env?.ADMIN_PASSWORD : '');
       
-      let storedPass = 'admin123';
+      let storedPass: string | null = null;
       if (storage.getAdminPassword) {
-        storedPass = await storage.getAdminPassword();
-      } else {
-        storedPass = (await cache.get('admin_password')) || envPass || 'admin123';
+        try {
+          storedPass = await storage.getAdminPassword();
+        } catch (e) {
+          console.warn('Failed to read admin password from storage:', e);
+        }
       }
+      if (!storedPass || storedPass === 'admin123') {
+        try {
+          const kvPass = await cache.get('admin_password');
+          if (kvPass) storedPass = kvPass;
+        } catch (e) {
+          console.warn('Failed to read admin password from cache:', e);
+        }
+      }
+      const finalExpectedPass = storedPass || envPass || 'admin123';
 
-      const isValid = 
-        pass === storedPass ||
-        pass === 'admin123' || 
-        (envPass ? pass === envPass : false);
+      const isValid = pass === finalExpectedPass || (finalExpectedPass === 'admin123' && pass === 'admin123');
 
       if (isValid) {
         return c.json({ success: true, token: 'token-cloudpulse-admin-secure' });
@@ -625,17 +674,27 @@ done
     try {
       const body = await c.req.json();
       const { oldPass, newPass } = body;
+      const envPass = env?.ADMIN_PASSWORD || (typeof process !== 'undefined' ? process.env?.ADMIN_PASSWORD : '');
       
-      let storedPass = 'admin123';
+      let storedPass: string | null = null;
       if (storage.getAdminPassword) {
-        storedPass = await storage.getAdminPassword();
-      } else {
-        storedPass = (await cache.get('admin_password')) || 'admin123';
+        try {
+          storedPass = await storage.getAdminPassword();
+        } catch (e) {
+          console.warn('Failed to read admin password from storage:', e);
+        }
       }
+      if (!storedPass || storedPass === 'admin123') {
+        try {
+          const kvPass = await cache.get('admin_password');
+          if (kvPass) storedPass = kvPass;
+        } catch (e) {
+          console.warn('Failed to read admin password from cache:', e);
+        }
+      }
+      const finalExpectedPass = storedPass || envPass || 'admin123';
       
-      const isOldValid = 
-        oldPass === storedPass ||
-        oldPass === 'admin123';
+      const isOldValid = oldPass === finalExpectedPass;
 
       if (!isOldValid) {
         return c.json({ success: false, error: '原密码错误' }, 400);

@@ -19,6 +19,9 @@ import {
   ChevronRight,
   Gauge,
   HelpCircle,
+  Database,
+  Layers,
+  HardDrive,
 } from 'lucide-react';
 import { CloudflareQuotaConfig, CloudflareQuotaEstimate } from '../types';
 import { fetchQuotaSettings, updateQuotaSettings, pruneExpiredHistory } from '../api';
@@ -44,6 +47,14 @@ export const CloudflareQuotaManager: React.FC<CloudflareQuotaManagerProps> = ({
   const [ecoMode, setEcoMode] = useState<boolean>(true);
   const [autoPrune, setAutoPrune] = useState<boolean>(true);
   const [edgeCacheAge, setEdgeCacheAge] = useState<number>(30);
+
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
 
   const computeQuotaEstimate = (cfg: CloudflareQuotaConfig, nodeCount: number = 6): CloudflareQuotaEstimate => {
     const hbSeconds = Math.max(10, cfg.heartbeatIntervalSeconds || 60);
@@ -85,6 +96,8 @@ export const CloudflareQuotaManager: React.FC<CloudflareQuotaManagerProps> = ({
       usagePercentage,
       status,
       recommendations,
+      d1Usage: cfg.d1Usage,
+      kvUsage: cfg.kvUsage,
     };
   };
 
@@ -365,6 +378,162 @@ export const CloudflareQuotaManager: React.FC<CloudflareQuotaManagerProps> = ({
           <div className="text-[11px] text-slate-400 flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
             <span>访客高频刷新不会产生额外 Worker 计费</span>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* 2.5 D1 Database & KV Namespace Daily Usage Monitor */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* D1 Database Daily Usage Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.22 }}
+          className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <div className="p-1 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                  <Database className="w-3.5 h-3.5" />
+                </div>
+                <span>Cloudflare D1 数据库每日用量 (SQL)</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                {(estimate?.d1Usage?.readUsagePercent || 0) < 80 ? '安全充裕' : '用量偏高'}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {/* Daily Rows Read */}
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">每日行读取量 (Rows Read)</span>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {estimate?.d1Usage?.dailyRowsRead.toLocaleString() || '0'}
+                    <span className="text-[11px] font-normal text-slate-400 ml-1">/ 5,000,000 行/天</span>
+                    <span className="ml-1.5 text-blue-600 dark:text-blue-400">({estimate?.d1Usage?.readUsagePercent || 0}%)</span>
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                    style={{ width: `${Math.max(2, Math.min(100, estimate?.d1Usage?.readUsagePercent || 0.1))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Daily Rows Written */}
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">每日行写入量 (Rows Written)</span>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {estimate?.d1Usage?.dailyRowsWritten.toLocaleString() || '0'}
+                    <span className="text-[11px] font-normal text-slate-400 ml-1">/ 100,000 行/天</span>
+                    <span className="ml-1.5 text-blue-600 dark:text-blue-400">({estimate?.d1Usage?.writeUsagePercent || 0}%)</span>
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                    style={{ width: `${Math.max(2, Math.min(100, estimate?.d1Usage?.writeUsagePercent || 0.3))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Database Storage */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                  <HardDrive className="w-3.5 h-3.5 text-blue-500" />
+                  <span>数据库实际存储占用</span>
+                </div>
+                <div className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                  {formatBytes(estimate?.d1Usage?.storageBytes || 131072)}
+                  <span className="text-slate-400 font-normal ml-1">/ 5 GB 免费上限</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+            <span>包含 {estimate?.d1Usage?.totalTables || 10} 张数据表，共计 {estimate?.d1Usage?.totalRows?.toLocaleString() || '0'} 行持久化记录</span>
+          </div>
+        </motion.div>
+
+        {/* KV Namespace Daily Usage Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.25 }}
+          className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <div className="p-1 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                  <Layers className="w-3.5 h-3.5" />
+                </div>
+                <span>Cloudflare KV 命名空间每日用量 (Cache)</span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                {(estimate?.kvUsage?.writeUsagePercent || 0) < 80 ? '安全充裕' : '写配额警告'}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {/* Daily KV Reads */}
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">每日读取操作 (Daily Reads)</span>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {estimate?.kvUsage?.dailyReads.toLocaleString() || '0'}
+                    <span className="text-[11px] font-normal text-slate-400 ml-1">/ 100,000 次/天</span>
+                    <span className="ml-1.5 text-amber-600 dark:text-amber-400">({estimate?.kvUsage?.readUsagePercent || 0}%)</span>
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                    style={{ width: `${Math.max(2, Math.min(100, estimate?.kvUsage?.readUsagePercent || 0.4))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Daily KV Writes */}
+              <div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">每日写入操作 (Daily Writes)</span>
+                  <div className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {estimate?.kvUsage?.dailyWrites.toLocaleString() || '0'}
+                    <span className="text-[11px] font-normal text-slate-400 ml-1">/ 1,000 次/天</span>
+                    <span className="ml-1.5 text-orange-600 dark:text-orange-400">({estimate?.kvUsage?.writeUsagePercent || 0}%)</span>
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-orange-500 transition-all duration-500"
+                    style={{ width: `${Math.max(2, Math.min(100, estimate?.kvUsage?.writeUsagePercent || 1.2))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* KV Deletes and Storage */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                <div className="text-slate-500 dark:text-slate-400">
+                  删除操作: <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{estimate?.kvUsage?.dailyDeletes || 0}</span> / 1,000 次
+                </div>
+                <div className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                  {formatBytes(estimate?.kvUsage?.storageBytes || 24576)}
+                  <span className="text-slate-400 font-normal ml-1">/ 1 GB 免费上限</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1">
+            <Zap className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+            <span>免费版每日限 1,000 次写入，节能模式已启用防抖聚合保护</span>
           </div>
         </motion.div>
       </div>

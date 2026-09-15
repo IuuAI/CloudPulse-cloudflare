@@ -312,6 +312,34 @@ export interface AuditLogItem {
 }
 
 // Cloudflare Free Tier & Quota Configuration
+export interface CloudflareD1UsageStats {
+  dailyRowsRead: number;
+  readLimit: number;
+  dailyRowsWritten: number;
+  writeLimit: number;
+  storageBytes: number;
+  storageLimitBytes: number;
+  totalTables: number;
+  totalRows: number;
+  readUsagePercent: number;
+  writeUsagePercent: number;
+  storageUsagePercent: number;
+}
+
+export interface CloudflareKVUsageStats {
+  dailyReads: number;
+  readLimit: number;
+  dailyWrites: number;
+  writeLimit: number;
+  dailyDeletes: number;
+  deleteLimit: number;
+  storageBytes: number;
+  storageLimitBytes: number;
+  totalKeys: number;
+  readUsagePercent: number;
+  writeUsagePercent: number;
+}
+
 export interface CloudflareQuotaConfig {
   heartbeatIntervalSeconds: number; // e.g. 60 (Heartbeat report time: 10s - 600s)
   historyRetentionDays: number; // e.g. 30 (Historical metrics retention: 1 - 180 days)
@@ -321,6 +349,8 @@ export interface CloudflareQuotaConfig {
   maxStoredMetricPoints: number; // Cap on stored metric points to stay within storage quota
   autoPruneExpiredHistory: boolean;
   workerDailyRequestLimit: number; // Standard free tier: 100,000
+  d1Usage?: CloudflareD1UsageStats;
+  kvUsage?: CloudflareKVUsageStats;
 }
 
 export type QuotaSettings = CloudflareQuotaConfig;
@@ -336,6 +366,8 @@ export interface CloudflareQuotaEstimate {
   usagePercentage: number;
   status: 'safe' | 'warning' | 'exceeded';
   recommendations: string[];
+  d1Usage?: CloudflareD1UsageStats;
+  kvUsage?: CloudflareKVUsageStats;
 }
 
 export interface SystemApiKeysConfig {

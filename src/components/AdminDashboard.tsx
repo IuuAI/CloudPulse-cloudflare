@@ -33,6 +33,8 @@ import {
   Bot,
   Send,
   ExternalLink,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { DatabaseBackupManager } from './DatabaseBackupManager';
 import { WebhookManager } from './WebhookManager';
@@ -131,6 +133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     latency: 35,
     description: '',
   });
+  const [serviceViewMode, setServiceViewMode] = useState<'grid' | 'table'>('grid');
 
   // Incident Modal State
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
@@ -818,112 +821,250 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                setEditingService(null);
-                setServiceForm({
-                  name: '',
-                  category: 'API',
-                  url: '',
-                  status: 'operational',
-                  latency: 35,
-                  description: '',
-                });
-                setIsServiceModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors self-start sm:self-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ 新增微服务监控</span>
-            </button>
-          </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setServiceViewMode('grid')}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    serviceViewMode === 'grid'
+                      ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-300 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                  title="卡片网格视图（与服务器节点排版一致）"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>卡片</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setServiceViewMode('table')}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    serviceViewMode === 'table'
+                      ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-300 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                  title="表格列表视图"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>表格</span>
+                </button>
+              </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 border-b border-slate-200 dark:border-slate-800">
-                  <tr>
-                    <th className="p-3.5 font-semibold">服务名称 & 分类</th>
-                    <th className="p-3.5 font-semibold">健康状态</th>
-                    <th className="p-3.5 font-semibold">探测延迟</th>
-                    <th className="p-3.5 font-semibold">30d SLA</th>
-                    <th className="p-3.5 font-semibold">目标 URL</th>
-                    <th className="p-3.5 font-semibold text-right">管理操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {safeServices.map((srv) => (
-                    <tr key={srv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      <td className="p-3.5">
-                        <div className="font-bold text-slate-900 dark:text-white">
-                          {srv.name}
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {srv.category}
-                        </span>
-                      </td>
-
-                      <td className="p-3.5">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            srv.status === 'operational'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                              : srv.status === 'degraded'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                          }`}
-                        >
-                          {srv.status}
-                        </span>
-                      </td>
-
-                      <td className="p-3.5 font-mono text-slate-700 dark:text-slate-300">
-                        {srv.latency} ms
-                      </td>
-
-                      <td className="p-3.5 font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-                        {srv.uptime30d}%
-                      </td>
-
-                      <td className="p-3.5 font-mono text-slate-400 truncate max-w-[180px]">
-                        {srv.url || '-'}
-                      </td>
-
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => {
-                              setEditingService(srv);
-                              setServiceForm({
-                                name: srv.name,
-                                category: srv.category,
-                                url: srv.url,
-                                status: srv.status,
-                                latency: srv.latency,
-                                description: srv.description,
-                              });
-                              setIsServiceModalOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs transition-colors"
-                            title="编辑微服务信息"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteService(srv.id, srv.name)}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-xs transition-colors"
-                            title="删除微服务"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <button
+                onClick={() => {
+                  setEditingService(null);
+                  setServiceForm({
+                    name: '',
+                    category: 'API',
+                    url: '',
+                    status: 'operational',
+                    latency: 35,
+                    description: '',
+                  });
+                  setIsServiceModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ 新增微服务监控</span>
+              </button>
             </div>
           </div>
+
+          {serviceViewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {safeServices.map((srv) => (
+                <div
+                  key={srv.id}
+                  className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                >
+                  {/* Top Row: Service info and Icon Action Buttons */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-2.5 h-2.5 rounded-full ${
+                          srv.status === 'operational'
+                            ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50'
+                            : srv.status === 'degraded'
+                            ? 'bg-amber-500'
+                            : 'bg-rose-500'
+                        }`}
+                      />
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                          {srv.name}
+                        </h4>
+                        <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5 font-mono">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
+                            {srv.category}
+                          </span>
+                          <span>•</span>
+                          <span className="truncate max-w-[150px]">{srv.url || '内部RPC服务'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Icons - Same style as Server & Probe Nodes */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingService(srv);
+                          setServiceForm({
+                            name: srv.name,
+                            category: srv.category,
+                            url: srv.url,
+                            status: srv.status,
+                            latency: srv.latency,
+                            description: srv.description,
+                          });
+                          setIsServiceModalOpen(true);
+                        }}
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs transition-colors"
+                        title="编辑微服务信息"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteService(srv.id, srv.name)}
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-xs transition-colors"
+                        title="删除微服务"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Metrics Box */}
+                  <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-100 dark:border-slate-800 text-center font-mono">
+                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                      <div className="text-[10px] text-slate-400">探测延迟</div>
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{srv.latency} ms</div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                      <div className="text-[10px] text-slate-400">30天可用率</div>
+                      <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{srv.uptime30d}%</div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                      <div className="text-[10px] text-slate-400">当前健康</div>
+                      <div className="text-[11px] font-bold uppercase truncate text-slate-800 dark:text-slate-200">
+                        {srv.status === 'operational' ? '正常' : srv.status === 'degraded' ? '高延迟' : '异常'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom details */}
+                  <div className="pt-1 flex items-center justify-between text-[11px] text-slate-400">
+                    <div className="truncate max-w-[200px] text-slate-500 dark:text-slate-400">
+                      {srv.description || '微服务健康拨测探测监控点'}
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {srv.lastCheck ? new Date(srv.lastCheck).toLocaleTimeString() : '刚刚'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {safeServices.length === 0 && (
+                <div className="col-span-full text-center py-10 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 text-xs">
+                  暂无微服务监控目标，请点击右上角新增
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="p-3.5 font-semibold">服务名称 & 分类</th>
+                      <th className="p-3.5 font-semibold">健康状态</th>
+                      <th className="p-3.5 font-semibold">探测延迟</th>
+                      <th className="p-3.5 font-semibold">30d SLA</th>
+                      <th className="p-3.5 font-semibold">目标 URL</th>
+                      <th className="p-3.5 font-semibold text-right">管理操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {safeServices.map((srv) => (
+                      <tr key={srv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-900 dark:text-white">
+                            {srv.name}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {srv.category}
+                          </span>
+                        </td>
+
+                        <td className="p-3.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              srv.status === 'operational'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : srv.status === 'degraded'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                            }`}
+                          >
+                            {srv.status}
+                          </span>
+                        </td>
+
+                        <td className="p-3.5 font-mono text-slate-700 dark:text-slate-300">
+                          {srv.latency} ms
+                        </td>
+
+                        <td className="p-3.5 font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                          {srv.uptime30d}%
+                        </td>
+
+                        <td className="p-3.5 font-mono text-slate-400 truncate max-w-[180px]">
+                          {srv.url || '-'}
+                        </td>
+
+                        <td className="p-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => {
+                                setEditingService(srv);
+                                setServiceForm({
+                                  name: srv.name,
+                                  category: srv.category,
+                                  url: srv.url,
+                                  status: srv.status,
+                                  latency: srv.latency,
+                                  description: srv.description,
+                                });
+                                setIsServiceModalOpen(true);
+                              }}
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs transition-colors"
+                              title="编辑微服务信息"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteService(srv.id, srv.name)}
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-xs transition-colors"
+                              title="删除微服务"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {safeServices.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
+                          暂无微服务监控目标，请点击右上角新增
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1808,15 +1949,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    公网或内网 IP
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                    <span>节点内部标识 / IP</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">公网已自动脱敏</span>
                   </label>
                   <input
                     type="text"
-                    required
                     value={nodeForm.ip}
                     onChange={(e) => setNodeForm({ ...nodeForm, ip: e.target.value })}
-                    placeholder="198.51.100.23"
+                    placeholder="可填写内网IP或留空"
                     className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
@@ -1899,14 +2040,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <select
                     value={serviceForm.category}
                     onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
-                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium"
                   >
-                    <option value="API">API Gateway (API网关)</option>
-                    <option value="Frontend">Frontend / CDN (前端与加速)</option>
-                    <option value="Database">Database (数据库)</option>
-                    <option value="Cache">Cache & Queue (缓存与队列)</option>
-                    <option value="Payments">Payments (支付系统)</option>
-                    <option value="Integration">Integration (第三方集成)</option>
+                    <option value="API">API Gateway (API 网关 / 接口调度)</option>
+                    <option value="Frontend">Frontend / CDN (前端页面 / 静态加速)</option>
+                    <option value="Database">Database (数据库 / D1 持久化存储)</option>
+                    <option value="Cache">Cache & Queue (KV 缓存 / 消息队列)</option>
+                    <option value="Payments">Payments (支付系统 / 交易清结算)</option>
+                    <option value="Integration">Integration (外部开放接口 / 第三方集成)</option>
                   </select>
                 </div>
 
@@ -1930,6 +2071,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <option value="major_outage">Major Outage (重大故障)</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Chinese category helper tips */}
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 leading-relaxed">
+                <span className="font-semibold text-slate-700 dark:text-slate-200">分类说明: </span>
+                {serviceForm.category === 'API' && '【API 网关】负责前台鉴权、统一入口路由、RESTful/GraphQL API、微服务反向代理。'}
+                {serviceForm.category === 'Frontend' && '【前端与静态加速】负责 SPA 页面、Vite 资源分发、CDN 边缘加速节点、静态站点。'}
+                {serviceForm.category === 'Database' && '【数据库】负责结构化核心数据存储，例如 Cloudflare D1 (SQLite)、PostgreSQL、MySQL 等。'}
+                {serviceForm.category === 'Cache' && '【缓存与队列】负责高并发键值缓存 (Cloudflare KV)、Redis、Upstash 或异步任务消息管道。'}
+                {serviceForm.category === 'Payments' && '【支付与结算】负责在线交易扣费、对账通道、Stripe、微信支付、支付宝等核心交易链路。'}
+                {serviceForm.category === 'Integration' && '【第三方集成】负责 Telegram 告警推送、Webhook 外部通知、企业微信、OAuth 等第三方系统集成。'}
               </div>
 
               <div>

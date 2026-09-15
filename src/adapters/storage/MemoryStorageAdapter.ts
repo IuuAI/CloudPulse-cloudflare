@@ -146,12 +146,35 @@ export class MemoryStorageAdapter implements StorageAdapter {
     this.quotaSettings = { ...this.quotaSettings, ...settings };
   }
 
+  private adminPassword = 'admin123';
+
   async getAdminPassword(): Promise<string> {
-    return 'admin123';
+    return this.adminPassword;
   }
 
   async saveAdminPassword(password: string): Promise<void> {
-    // Memory store
+    this.adminPassword = password;
+  }
+
+  async getD1UsageStats(): Promise<any> {
+    const readLimit = 5000000;
+    const writeLimit = 100000;
+    const storageLimitBytes = 5 * 1024 * 1024 * 1024;
+    const totalRows = this.services.length + this.nodes.length + this.incidents.length + this.metricsHistory.length + this.telegramLogs.length;
+    const storageBytes = 64 * 1024 + totalRows * 320;
+    return {
+      dailyRowsRead: 1680,
+      readLimit,
+      dailyRowsWritten: 320,
+      writeLimit,
+      storageBytes,
+      storageLimitBytes,
+      totalTables: 9,
+      totalRows,
+      readUsagePercent: 0.03,
+      writeUsagePercent: 0.32,
+      storageUsagePercent: 0.01,
+    };
   }
 
   async pruneHistory(retentionDays: number): Promise<number> {

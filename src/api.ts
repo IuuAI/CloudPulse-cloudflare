@@ -193,6 +193,18 @@ export async function fetchQuotaSettings(): Promise<QuotaSettings> {
   return res.json();
 }
 
+export async function fetchCloudflareDailyUsage(): Promise<{
+  success: boolean;
+  timestamp: string;
+  d1Usage?: any;
+  kvUsage?: any;
+  connectionPool?: any;
+}> {
+  const res = await fetch('/api/cloudflare/daily-usage');
+  if (!res.ok) throw new Error('Failed to fetch Cloudflare daily usage');
+  return res.json();
+}
+
 export async function updateQuotaSettings(settings: Partial<QuotaSettings>): Promise<QuotaSettings> {
   const res = await fetch('/api/settings/quota', {
     method: 'PUT',
