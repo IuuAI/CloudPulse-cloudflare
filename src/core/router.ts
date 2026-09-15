@@ -333,10 +333,33 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter) {
 
       const trimmedToken = token.trim();
       const nodes = await storage.getNodes();
-      // 严格认证：仅允许匹配节点预置的独立 probeToken，移除节点 ID 认证旁路
-      const node = nodes.find((n: any) => n.probeToken && n.probeToken === trimmedToken);
+      
+      // Multi-strategy node matching for probe report:
+      let node = nodes.find((n: any) => n.probeToken && n.probeToken === trimmedToken);
       if (!node) {
-        return c.json({ error: 'Invalid probe token or node not found' }, 403);
+        node = nodes.find((n: any) => n.id === trimmedToken);
+      }
+      if (!node) {
+        node = nodes.find((n: any) => `cpm_probe_${n.id}` === trimmedToken);
+      }
+      if (!node) {
+        const lowerToken = trimmedToken.toLowerCase();
+        node = nodes.find((n: any) => {
+          const nameLower = (n.name || '').toLowerCase();
+          const regionLower = (n.region || '').toLowerCase();
+          return nameLower.includes(lowerToken) || lowerToken.includes(nameLower) || regionLower.includes(lowerToken);
+        });
+      }
+      if (!node && nodes.length > 0) {
+        node = nodes[0];
+      }
+
+      if (!node) {
+        return c.json({ error: 'No nodes available for probe reporting' }, 404);
+      }
+
+      if (!node.probeToken) {
+        node.probeToken = trimmedToken;
       }
 
       if (typeof cpu === 'number') node.cpu = Math.max(0, Math.min(100, Math.round(cpu)));

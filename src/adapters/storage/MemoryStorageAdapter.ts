@@ -89,7 +89,7 @@ const fallbackNodes: any[] = [
     os: 'Ubuntu 24.04 LTS (x86_64)',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Asia', 'Edge', 'Gateway'],
-    probeToken: '',
+    probeToken: 'tok-tokyo-01',
     flagEmoji: '🇯🇵',
   },
   {
@@ -108,7 +108,7 @@ const fallbackNodes: any[] = [
     os: 'Debian 12 Bookworm',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Europe', 'Core', 'Cluster'],
-    probeToken: '',
+    probeToken: 'tok-frankfurt-01',
     flagEmoji: '🇩🇪',
   },
   {
@@ -127,7 +127,7 @@ const fallbackNodes: any[] = [
     os: 'Alpine Linux 3.20',
     lastHeartbeat: new Date().toISOString(),
     tags: ['US-West', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-sanjose-01',
     flagEmoji: '🇺🇸',
   },
   {
@@ -146,7 +146,7 @@ const fallbackNodes: any[] = [
     os: 'Ubuntu 24.04 LTS',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Asia-SE', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-singapore-01',
     flagEmoji: '🇸🇬',
   },
   {
@@ -165,7 +165,7 @@ const fallbackNodes: any[] = [
     os: 'Debian 12',
     lastHeartbeat: new Date().toISOString(),
     tags: ['SA', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-saopaulo-01',
     flagEmoji: '🇧🇷',
   },
   {
@@ -184,7 +184,7 @@ const fallbackNodes: any[] = [
     os: 'Ubuntu 24.04 LTS',
     lastHeartbeat: new Date().toISOString(),
     tags: ['Oceania', 'Edge'],
-    probeToken: '',
+    probeToken: 'tok-sydney-01',
     flagEmoji: '🇦🇺',
   },
 ];
