@@ -325,41 +325,23 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter) {
   // Probe Heartbeat Report Ingest Endpoint (authenticated strictly via probe token)
   app.post('/api/probe/report', async (c) => {
     try {
-      const body = await c.req.json();
+      const body = await c.req.json().catch(() => ({}));
+      console.log('[Probe Report] Received request body:', JSON.stringify(body));
       const { token, cpu, ram, disk, ping, networkIn, networkOut } = body;
       if (!token || typeof token !== 'string' || token.trim().length === 0) {
+        console.warn('[Probe Report] Rejected: Missing or invalid probe token', body);
         return c.json({ error: 'Missing or invalid probe token' }, 400);
       }
 
       const trimmedToken = token.trim();
       const nodes = await storage.getNodes();
       
-      // Multi-strategy node matching for probe report:
-      let node = nodes.find((n: any) => n.probeToken && n.probeToken === trimmedToken);
-      if (!node) {
-        node = nodes.find((n: any) => n.id === trimmedToken);
-      }
-      if (!node) {
-        node = nodes.find((n: any) => `cpm_probe_${n.id}` === trimmedToken);
-      }
-      if (!node) {
-        const lowerToken = trimmedToken.toLowerCase();
-        node = nodes.find((n: any) => {
-          const nameLower = (n.name || '').toLowerCase();
-          const regionLower = (n.region || '').toLowerCase();
-          return nameLower.includes(lowerToken) || lowerToken.includes(nameLower) || regionLower.includes(lowerToken);
-        });
-      }
-      if (!node && nodes.length > 0) {
-        node = nodes[0];
-      }
+      // Strict authentication: require exact match on n.probeToken === trimmedToken, removing ID / fallback bypasses
+      const node = nodes.find((n: any) => n.probeToken && n.probeToken === trimmedToken);
 
       if (!node) {
-        return c.json({ error: 'No nodes available for probe reporting' }, 404);
-      }
-
-      if (!node.probeToken) {
-        node.probeToken = trimmedToken;
+        console.warn('[Probe Report] Rejected: Invalid probe token or node not found:', trimmedToken);
+        return c.json({ error: 'Invalid probe token or node not found' }, 403);
       }
 
       if (typeof cpu === 'number') node.cpu = Math.max(0, Math.min(100, Math.round(cpu)));
@@ -373,8 +355,10 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter) {
       node.status = (node.cpu > 90 || node.ram > 95) ? 'degraded' : 'healthy';
 
       await storage.saveNode(node);
+      console.log(`[Unit Test / DB Write Confirmation] Successfully persisted probe metrics for node ${node.id} (${node.name}): CPU=${node.cpu}%, RAM=${node.ram}%, Disk=${node.disk}%, Ping=${node.ping}ms`);
       return c.json({ success: true, node: { id: node.id, name: node.name, status: node.status, lastSeen: node.lastSeen } });
     } catch (err: any) {
+      console.error('[Probe Report] Error:', err);
       return c.json({ error: err.message }, 500);
     }
   });
