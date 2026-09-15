@@ -345,6 +345,16 @@ export class MemoryStorageAdapter implements StorageAdapter {
     this.quotaSettings = { ...this.quotaSettings, ...settings };
   }
 
+  private adminAuth: { passwordHash: string; salt: string; updatedAt: string } | null = null;
+
+  async getAdminAuth(): Promise<{ passwordHash: string; salt: string; updatedAt: string } | null> {
+    return this.adminAuth ? { ...this.adminAuth } : null;
+  }
+
+  async saveAdminAuth(auth: { passwordHash: string; salt: string; updatedAt: string }): Promise<void> {
+    this.adminAuth = { ...auth };
+  }
+
   async getD1UsageStats(): Promise<any> {
     const readLimit = 5000000;
     const writeLimit = 100000;

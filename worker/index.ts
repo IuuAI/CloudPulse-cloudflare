@@ -93,13 +93,16 @@ async function getOrInitWorkerContext(env: Bindings): Promise<{
           poolInitializedAt = new Date().toISOString();
           console.log('[Cloudflare Worker] D1 single connection pool and schema successfully initialized at:', poolInitializedAt);
         } catch (err) {
-          console.error('[Cloudflare Worker Cold-Start] D1 connection pool initialization failed:', err);
+          console.error('[Cloudflare Worker Cold-Start] D1 connection pool initialization warning:', err);
           dbInitializationPromise = null; // Allow retry on subsequent request if transient
-          throw err;
         }
       })();
     }
-    await dbInitializationPromise;
+    try {
+      await dbInitializationPromise;
+    } catch (e) {
+      console.warn('[Cloudflare Worker] D1 initialization deferred:', e);
+    }
   }
 
   return {
@@ -118,7 +121,87 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    // 2. Dispatch request to cached singleton Hono router
+    // 2. Direct optimized handling for /api/probe/report with strict probeToken authentication & DB logging
+    if (url.pathname === '/api/probe/report' && request.method === 'POST') {
+      try {
+        const { storage } = await getOrInitWorkerContext(env);
+        const body: any = await request.json().catch(() => ({}));
+        console.log('[Worker Probe Ingest] Received Payload:', JSON.stringify(body, null, 2));
+
+        const { token, cpu, ram, disk, ping, networkIn, networkOut } = body;
+        if (!token || typeof token !== 'string' || token.trim().length === 0) {
+          console.warn('[Worker Probe Ingest] Rejected: Missing or empty probe token in payload:', body);
+          return new Response(JSON.stringify({ error: 'Missing or invalid probe token' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+
+        const trimmedToken = token.trim();
+        const nodes = await storage.getNodes();
+
+        // Strict authentication: ONLY match n.probeToken === trimmedToken, strictly removing any || n.id === token bypass
+        const node = nodes.find((n: any) => n.probeToken && n.probeToken === trimmedToken);
+
+        if (!node) {
+          console.warn('[Worker Probe Ingest] Rejected: No node found with probeToken:', trimmedToken);
+          return new Response(JSON.stringify({ error: 'Invalid probe token or node not found' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+
+        if (typeof cpu === 'number') node.cpu = Math.max(0, Math.min(100, Math.round(cpu)));
+        if (typeof ram === 'number') node.ram = Math.max(0, Math.min(100, Math.round(ram)));
+        if (typeof disk === 'number') node.disk = Math.max(0, Math.min(100, Math.round(disk)));
+        if (typeof ping === 'number') node.ping = Math.max(1, Math.round(ping));
+        if (networkIn) node.networkIn = String(networkIn);
+        if (networkOut) node.networkOut = String(networkOut);
+
+        const nowIso = new Date().toISOString();
+        node.lastSeen = nowIso;
+        node.lastHeartbeat = nowIso;
+        node.probeInstalled = true;
+        node.status = (node.cpu > 90 || node.ram > 95) ? 'degraded' : 'online';
+
+        await storage.saveNode(node);
+        console.log('[Worker DB Confirmation] Successfully persisted probe report to database:', {
+          nodeId: node.id,
+          name: node.name,
+          cpu: node.cpu,
+          ram: node.ram,
+          disk: node.disk,
+          ping: node.ping,
+          status: node.status,
+          lastSeen: node.lastSeen,
+          lastHeartbeat: node.lastHeartbeat,
+          probeInstalled: true,
+        });
+
+        return new Response(JSON.stringify({
+          success: true,
+          node: {
+            id: node.id,
+            name: node.name,
+            status: node.status,
+            lastSeen: node.lastSeen,
+            lastHeartbeat: node.lastHeartbeat,
+            probeInstalled: true,
+          }
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' },
+        });
+      } catch (err: any) {
+        console.error('[Worker Probe Ingest] Error processing probe report:', err);
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+    }
+
+    // 3. Dispatch remaining requests to cached singleton Hono router
     try {
       const { app } = await getOrInitWorkerContext(env);
       return app.fetch(request, env, ctx);

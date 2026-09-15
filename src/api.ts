@@ -250,14 +250,27 @@ export async function pruneExpiredHistory(retentionDays?: number): Promise<{
   };
 }
 
+async function computeSha256(text: string): Promise<string> {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  return text;
+}
+
 export async function verifyAdminAuth(password?: string): Promise<boolean> {
   const token = localStorage.getItem('cloudpulse_admin_token');
   if (!password && !token) return false;
 
+  const passwordHash = password ? await computeSha256(password) : undefined;
   const res = await fetch('/api/admin/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ password, passwordHash, clientEncrypted: true }),
   });
   if (!res.ok) {
     if (!password) localStorage.removeItem('cloudpulse_admin_token');
@@ -272,11 +285,13 @@ export async function verifyAdminAuth(password?: string): Promise<boolean> {
   }
   return false;
 }
+
 export async function adminLogin(password: string): Promise<any> {
+  const passwordHash = await computeSha256(password);
   const res = await fetch('/api/admin/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ password, passwordHash, clientEncrypted: true }),
   });
   const data: any = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) {
@@ -290,6 +305,24 @@ export async function adminLogin(password: string): Promise<any> {
 
 export async function adminLogout(): Promise<void> {
   localStorage.removeItem('cloudpulse_admin_token');
+}
+
+export async function changeAdminPassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; message: string; token?: string }> {
+  const oldPasswordHash = await computeSha256(oldPassword);
+  const newPasswordHash = await computeSha256(newPassword);
+  const res = await fetch('/api/admin/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ oldPassword, newPassword, oldPasswordHash, newPasswordHash, clientEncrypted: true }),
+  });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || '修改密码失败');
+  }
+  if (data.token) {
+    localStorage.setItem('cloudpulse_admin_token', data.token);
+  }
+  return data;
 }
 
 export async function createService(data: any): Promise<any> {

@@ -56,6 +56,8 @@ export interface StorageAdapter {
   saveQuotaSettings(settings: any): Promise<void>;
   getAdminPassword?(): Promise<string>;
   saveAdminPassword?(password: string): Promise<void>;
+  getAdminAuth?(): Promise<{ passwordHash: string; salt: string; updatedAt: string } | null>;
+  saveAdminAuth?(auth: { passwordHash: string; salt: string; updatedAt: string }): Promise<void>;
   getD1UsageStats?(): Promise<CloudflareD1UsageStats>;
   pruneHistory(retentionDays: number): Promise<number>;
 }

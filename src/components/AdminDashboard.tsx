@@ -68,6 +68,7 @@ import {
   resolveIncident,
   deleteIncident,
   resetDemoData,
+  changeAdminPassword,
 } from '../api';
 
 interface AdminDashboardProps {
@@ -177,6 +178,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     await adminLogout();
     onAuthChange({ isAuthenticated: false });
     onShowToast('info', '已退出登录', '后台管理员会话已终止。');
+  };
+
+  // Password Change State & Handler
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!oldPassword || !newPassword) {
+      onShowToast('error', '参数缺失', '请输入原密码和新密码');
+      return;
+    }
+    if (newPassword.length < 6) {
+      onShowToast('error', '密码太短', '新密码长度至少需要 6 位字符');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      onShowToast('error', '密码不一致', '两次输入的新密码不一致，请重新核对');
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      const res = await changeAdminPassword(oldPassword, newPassword);
+      onShowToast('success', '密码修改成功', res.message || '管理员密码已成功更新并采用 SHA-256 加盐安全持久化。');
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      onShowToast('error', '修改失败', err.message);
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   // Node Actions
@@ -386,7 +421,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1.5">
                 <Shield className="w-3 h-3 text-sky-500 shrink-0" />
-                <span>密码由 Cloudflare 环境变量 ADMIN_PASSWORD 提供保护</span>
+                <span>SHA-256 加盐安全鉴权保护 | 已与面板变量解耦</span>
               </p>
             </div>
 
@@ -1318,7 +1353,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <p className="text-[11px] text-slate-500 leading-relaxed">
                         1. 进入 <strong>Compute ➔ Workers & Pages ➔ Create ➔ Worker</strong>，命名为 <code>cloudpulse-api</code>。<br />
                         2. 在 Worker <strong>Settings ➔ Bindings</strong> 添加 D1 绑定（变量名大写 <strong>DB</strong>）与 KV 绑定（变量名大写 <strong>CACHE</strong>）。<br />
-                        3. 在 <strong>Variables</strong> 添加加密变量 <code>ADMIN_PASSWORD</code>。
+                        3. <strong>管理员鉴权：</strong>已内置 Hono 中间件与加盐哈希存储，初次登录使用默认口令 <code>admin123</code> 并在系统后台自主修改即可，无需在控制台硬编码变量。
                       </p>
                     </div>
                     <button
@@ -1452,10 +1487,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </tr>
                       <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                         <td className="py-3 px-4 font-sans font-bold text-orange-600 dark:text-orange-400">后端 Worker</td>
-                        <td className="py-3 px-4 font-sans text-slate-900 dark:text-white">Settings ➔ Variables</td>
-                        <td className="py-3 px-4 text-violet-500">Encrypted Secret</td>
-                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">ADMIN_PASSWORD</td>
-                        <td className="py-3 px-4">自定义管理员登录密码</td>
+                        <td className="py-3 px-4 font-sans text-slate-900 dark:text-white">系统后台 ➔ 安全与密码设置</td>
+                        <td className="py-3 px-4 text-emerald-500">SHA-256 + Salt</td>
+                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">admin_auth (D1)</td>
+                        <td className="py-3 px-4">后台自主修改，无需硬编码控制台变量</td>
                       </tr>
                       <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                         <td className="py-3 px-4 font-sans font-bold text-orange-600 dark:text-orange-400">后端 Worker</td>
@@ -1668,50 +1703,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Key className="w-4 h-4 text-sky-500" />
-              <span>管理员安全凭据管理</span>
+              <span>管理员密码与安全鉴权</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              密码已全量托管至 Cloudflare 环境变量，已弃用默认密码与前端改密
+              支持在后台自主修改管理员密码，采用 SHA-256 + 128-bit Salt 加密存储，已完全解耦 Cloudflare 环境变量
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200/60 dark:border-sky-900/40 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-sky-900 dark:text-sky-300">
-              <Shield className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
-              <span>Cloudflare 环境变量/Secrets 保护机制</span>
+          <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-900 dark:text-emerald-300">
+              <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>非明文加盐存储与零信任鉴权</span>
             </div>
-            <p className="text-xs text-sky-800 dark:text-sky-300/90 leading-relaxed">
-              为杜绝默认弱口令（如 <code>admin123</code>）泄露与数据库持久化明文凭据的安全隐患，系统已舍弃默认密码与 Web 界面改密功能。当前后台密码完全由 Cloudflare Worker 环境变量 <code>ADMIN_PASSWORD</code> 提供零信任校验。
+            <p className="text-xs text-emerald-800 dark:text-emerald-300/90 leading-relaxed">
+              密码已不再依赖 Cloudflare 面板的环境变量配置。当您修改密码后，系统将自动生成高强度随机盐值并通过 SHA-256 算法计算单向哈希存入数据库，数据库中永不存储明文。
             </p>
           </div>
 
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
-              如何设置或修改管理员密码：
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-sky-500" />
+              <span>修改管理员登录密码</span>
             </h4>
-            
-            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
-              <div className="p-3 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] flex items-center justify-between">
-                <span>wrangler secret put ADMIN_PASSWORD</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText('wrangler secret put ADMIN_PASSWORD');
-                    onShowToast('success', '已复制 CLI 命令', '在终端运行即可交互式输入新密码。');
-                  }}
-                  className="text-sky-400 hover:text-sky-300 text-xs px-2 py-0.5 rounded bg-slate-800 transition-colors"
-                >
-                  复制
-                </button>
-              </div>
 
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                <b>或在 Cloudflare 控制台配置：</b>
-                <br />
-                访问 <i>Cloudflare Dashboard → Workers &amp; Pages → cloudpulse-cloudflare-api → 设置 → 变量和机密 (Variables and Secrets)</i>，添加或编辑机密 <code>ADMIN_PASSWORD</code> 即可立即生效，无需重新构建。
-              </p>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                当前原密码 (Old Password)
+              </label>
+              <input
+                type="password"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                placeholder="请输入当前生效的管理员密码"
+                className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">若从未修改过，默认初始密码为 <code className="text-sky-600 dark:text-sky-400 font-bold">admin123</code></p>
             </div>
-          </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                新密码 (New Password)
+              </label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="请输入新管理员密码 (至少 6 位)"
+                className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                确认新密码 (Confirm New Password)
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="请再次输入新管理员密码"
+                className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isChangingPassword || !oldPassword || !newPassword || !confirmPassword}
+              className="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isChangingPassword ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>正在计算哈希并更新密码...</span>
+                </>
+              ) : (
+                <>
+                  <Key className="w-3.5 h-3.5" />
+                  <span>保存并更新管理员密码</span>
+                </>
+              )}
+            </button>
+          </form>
 
           <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
             <h4 className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">

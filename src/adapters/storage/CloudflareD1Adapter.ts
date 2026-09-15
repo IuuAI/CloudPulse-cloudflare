@@ -157,6 +157,12 @@ export class CloudflareD1Adapter implements StorageAdapter {
           rows_read INTEGER NOT NULL DEFAULT 0,
           rows_written INTEGER NOT NULL DEFAULT 0,
           last_updated TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS admin_auth (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          password_hash TEXT NOT NULL,
+          salt TEXT NOT NULL,
+          updated_at TEXT NOT NULL
         )`
       ];
 
@@ -474,6 +480,36 @@ export class CloudflareD1Adapter implements StorageAdapter {
   }
 
 
+
+  async getAdminAuth(): Promise<{ passwordHash: string; salt: string; updatedAt: string } | null> {
+    await this.ensureInitialized();
+    this.recordRead(1);
+    try {
+      const { results } = await this.db!.prepare("SELECT * FROM admin_auth WHERE id = 1").all();
+      if (!results || results.length === 0) return null;
+      const r: any = results[0];
+      return {
+        passwordHash: r.password_hash,
+        salt: r.salt,
+        updatedAt: r.updated_at,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async saveAdminAuth(auth: { passwordHash: string; salt: string; updatedAt: string }): Promise<void> {
+    await this.ensureInitialized();
+    this.recordWrite(1);
+    await this.db!.prepare(`
+      INSERT INTO admin_auth (id, password_hash, salt, updated_at)
+      VALUES (1, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET 
+        password_hash = excluded.password_hash,
+        salt = excluded.salt,
+        updated_at = excluded.updated_at
+    `).bind(auth.passwordHash, auth.salt, auth.updatedAt).run();
+  }
 
   async getD1UsageStats(): Promise<CloudflareD1UsageStats> {
     await this.ensureInitialized();
