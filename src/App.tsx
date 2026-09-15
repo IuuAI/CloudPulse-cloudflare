@@ -47,7 +47,7 @@ import {
   fallbackServices,
   fallbackNodes,
   fallbackMetricsHistory,
-} from './data/fallbackData';
+} from './data/fallbackData.ts';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainAppTab>('overview');

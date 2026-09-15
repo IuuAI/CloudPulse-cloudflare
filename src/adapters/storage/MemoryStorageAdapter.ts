@@ -4,7 +4,7 @@ import {
   fallbackServices,
   fallbackNodes,
   fallbackMetricsHistory,
-} from '../../data/fallbackData';
+} from '../../data/fallbackData.ts';
 
 export class MemoryStorageAdapter implements StorageAdapter {
   private overview: any = {
