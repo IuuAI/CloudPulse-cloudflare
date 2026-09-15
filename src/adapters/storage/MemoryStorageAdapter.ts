@@ -146,6 +146,14 @@ export class MemoryStorageAdapter implements StorageAdapter {
     this.quotaSettings = { ...this.quotaSettings, ...settings };
   }
 
+  async getAdminPassword(): Promise<string> {
+    return 'admin123';
+  }
+
+  async saveAdminPassword(password: string): Promise<void> {
+    // Memory store
+  }
+
   async pruneHistory(retentionDays: number): Promise<number> {
     return 0;
   }

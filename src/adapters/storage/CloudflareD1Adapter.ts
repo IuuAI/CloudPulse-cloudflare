@@ -102,6 +102,10 @@ export class CloudflareD1Adapter implements StorageAdapter {
           heartbeat_interval_seconds INTEGER NOT NULL,
           client_poll_interval_seconds INTEGER NOT NULL,
           max_stored_metric_points INTEGER NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS admin_settings (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          admin_password TEXT NOT NULL
         )`
       ];
 
@@ -145,6 +149,11 @@ export class CloudflareD1Adapter implements StorageAdapter {
         await this.db!.prepare(`
           INSERT OR IGNORE INTO quota_settings (id, worker_daily_request_limit, history_retention_days, eco_mode, auto_prune_expired_history, heartbeat_interval_seconds, client_poll_interval_seconds, max_stored_metric_points)
           VALUES (1, 100000, 30, 1, 1, 60, 30, 720)
+        `).run();
+
+        await this.db!.prepare(`
+          INSERT OR IGNORE INTO admin_settings (id, admin_password)
+          VALUES (1, 'admin123')
         `).run();
       }
 
@@ -381,8 +390,23 @@ export class CloudflareD1Adapter implements StorageAdapter {
     `).bind(q.workerDailyRequestLimit, q.historyRetentionDays, q.ecoMode ? 1 : 0, q.autoPruneExpiredHistory ? 1 : 0, q.heartbeatIntervalSeconds, q.clientPollIntervalSeconds, q.maxStoredMetricPoints).run();
   }
 
-  async pruneHistory(retentionDays: number): Promise<number> {
+  async getAdminPassword(): Promise<string> {
     await this.ensureInitialized();
+    const { results } = await this.db!.prepare("SELECT admin_password FROM admin_settings WHERE id = 1").all();
+    if (!results || results.length === 0) return 'admin123';
+    return (results[0] as any).admin_password || 'admin123';
+  }
+
+  async saveAdminPassword(password: string): Promise<void> {
+    await this.ensureInitialized();
+    await this.db!.prepare(`
+      INSERT INTO admin_settings (id, admin_password)
+      VALUES (1, ?)
+      ON CONFLICT(id) DO UPDATE SET admin_password = excluded.admin_password
+    `).bind(password).run();
+  }
+
+  async pruneHistory(retentionDays: number): Promise<number> {
     const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
     const res = await this.db!.prepare("DELETE FROM metrics_history WHERE timestamp < ?").bind(cutoff).run();
     return res.meta?.changes || 0;

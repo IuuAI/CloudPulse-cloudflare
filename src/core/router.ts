@@ -598,13 +598,17 @@ done
       const body = await c.req.json();
       const pass = body.password || '';
       const envPass = env?.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
-      const storedPass = (await cache.get('admin_password')) || envPass || 'admin123';
+      
+      let storedPass = 'admin123';
+      if (storage.getAdminPassword) {
+        storedPass = await storage.getAdminPassword();
+      } else {
+        storedPass = (await cache.get('admin_password')) || envPass || 'admin123';
+      }
+
       const isValid = 
         pass === storedPass ||
         pass === 'admin123' || 
-        pass === 'admin' || 
-        pass === 'password' || 
-        pass === '123456' || 
         (envPass ? pass === envPass : false);
 
       if (isValid) {
@@ -621,14 +625,17 @@ done
     try {
       const body = await c.req.json();
       const { oldPass, newPass } = body;
-      const storedPass = (await cache.get('admin_password')) || 'admin123';
+      
+      let storedPass = 'admin123';
+      if (storage.getAdminPassword) {
+        storedPass = await storage.getAdminPassword();
+      } else {
+        storedPass = (await cache.get('admin_password')) || 'admin123';
+      }
       
       const isOldValid = 
         oldPass === storedPass ||
-        oldPass === 'admin123' || 
-        oldPass === 'admin' || 
-        oldPass === 'password' || 
-        oldPass === '123456';
+        oldPass === 'admin123';
 
       if (!isOldValid) {
         return c.json({ success: false, error: '原密码错误' }, 400);
@@ -638,6 +645,9 @@ done
         return c.json({ success: false, error: '新密码长度至少为 4 位' }, 400);
       }
 
+      if (storage.saveAdminPassword) {
+        await storage.saveAdminPassword(newPass);
+      }
       await cache.set('admin_password', newPass);
       return c.json({ success: true, message: '密码修改成功' });
     } catch (err: any) {

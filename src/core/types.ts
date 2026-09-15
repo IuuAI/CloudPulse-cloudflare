@@ -26,6 +26,8 @@ export interface StorageAdapter {
   saveTelegramLog(log: any): Promise<void>;
   getQuotaSettings(): Promise<any>;
   saveQuotaSettings(settings: any): Promise<void>;
+  getAdminPassword?(): Promise<string>;
+  saveAdminPassword?(password: string): Promise<void>;
   pruneHistory(retentionDays: number): Promise<number>;
 }
 

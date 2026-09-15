@@ -1901,12 +1901,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
                     className="w-full text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                   >
-                    <option value="API">API Gateway</option>
-                    <option value="Frontend">Frontend / CDN</option>
-                    <option value="Database">Database</option>
-                    <option value="Cache">Cache & Queue</option>
-                    <option value="Payments">Payments</option>
-                    <option value="Integration">Integration</option>
+                    <option value="API">API Gateway (API网关)</option>
+                    <option value="Frontend">Frontend / CDN (前端与加速)</option>
+                    <option value="Database">Database (数据库)</option>
+                    <option value="Cache">Cache & Queue (缓存与队列)</option>
+                    <option value="Payments">Payments (支付系统)</option>
+                    <option value="Integration">Integration (第三方集成)</option>
                   </select>
                 </div>
 
