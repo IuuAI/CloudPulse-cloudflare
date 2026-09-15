@@ -5,8 +5,19 @@ import { StorageAdapter, CacheAdapter } from '../core/types';
 import { runMonitorCycle } from '../core/monitor';
 import { sendTelegramNotification } from '../adapters/notifications/TelegramNotifier';
 
+function getMergedEnv(c: any, defaultEnv?: any): Record<string, any> {
+  const procEnv = (typeof process !== 'undefined' && process.env) ? process.env : {};
+  const defEnv = defaultEnv || {};
+  const cEnv = (c && c.env && typeof c.env === 'object') ? c.env : {};
+  return {
+    ...procEnv,
+    ...defEnv,
+    ...cEnv,
+  };
+}
+
 function getJwtSecret(c: any, defaultEnv?: any): string {
-  const runtimeEnv = (c.env as any) || defaultEnv || (typeof process !== 'undefined' ? process.env : {});
+  const runtimeEnv = getMergedEnv(c, defaultEnv);
   const secret = runtimeEnv.JWT_SECRET || runtimeEnv.ADMIN_PASSWORD;
   if (!secret || typeof secret !== 'string' || secret.trim() === '') {
     throw new Error('服务端未配置 JWT_SECRET 或 ADMIN_PASSWORD 环境变量，无法进行 JWT 签发与验证。');
@@ -41,7 +52,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     maxAge: 86400,
   }));
 
-  const getEnv = (c: any) => (c.env as any) || env || (typeof process !== 'undefined' ? process.env : {});
+  const getEnv = (c: any) => getMergedEnv(c, env);
 
   const requireAdmin = async (c: any, next: () => Promise<void>) => {
     const isAuthed = await verifyAdminAuth(c, env);
