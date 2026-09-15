@@ -143,8 +143,8 @@ export default function App() {
           fetchNodes().catch(() => []),
           fetchIncidents().catch(() => []),
           fetchMetricsHistory().catch(() => []),
-          fetchTelegramConfig().catch(() => null),
-          fetchTelegramLogs().catch(() => []),
+          adminAuth.isAuthenticated ? fetchTelegramConfig().catch(() => null) : Promise.resolve(null),
+          adminAuth.isAuthenticated ? fetchTelegramLogs().catch(() => []) : Promise.resolve([]),
           fetchHealth().catch(() => null),
         ]);
 
@@ -199,7 +199,7 @@ export default function App() {
         setIsInitialLoading(false);
       }
     }
-  }, []);
+  }, [adminAuth.isAuthenticated]);
 
   // Check initial admin auth and load data
   useEffect(() => {
@@ -211,6 +211,7 @@ export default function App() {
           username: 'admin',
           token: localStorage.getItem('cloudpulse_admin_token') || undefined,
         });
+        loadData(true);
       }
     });
 
