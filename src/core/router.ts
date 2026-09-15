@@ -5,19 +5,17 @@ import { StorageAdapter, CacheAdapter } from '../core/types';
 import { runMonitorCycle } from '../core/monitor';
 import { sendTelegramNotification } from '../adapters/notifications/TelegramNotifier';
 
-function getMergedEnv(c: any, defaultEnv?: any): Record<string, any> {
+function getMergedEnv(c: any): Record<string, any> {
   const procEnv = (typeof process !== 'undefined' && process.env) ? process.env : {};
-  const defEnv = defaultEnv || {};
   const cEnv = (c && c.env && typeof c.env === 'object') ? c.env : {};
   return {
     ...procEnv,
-    ...defEnv,
     ...cEnv,
   };
 }
 
-function getJwtSecret(c: any, defaultEnv?: any): string {
-  const runtimeEnv = getMergedEnv(c, defaultEnv);
+function getJwtSecret(c: any): string {
+  const runtimeEnv = getMergedEnv(c);
   const secret = runtimeEnv.JWT_SECRET || runtimeEnv.ADMIN_PASSWORD;
   if (!secret || typeof secret !== 'string' || secret.trim() === '') {
     throw new Error('服务端未配置 JWT_SECRET 或 ADMIN_PASSWORD 环境变量，无法进行 JWT 签发与验证。');
@@ -25,7 +23,7 @@ function getJwtSecret(c: any, defaultEnv?: any): string {
   return secret;
 }
 
-async function verifyAdminAuth(c: any, defaultEnv?: any): Promise<boolean> {
+async function verifyAdminAuth(c: any): Promise<boolean> {
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return false;
@@ -33,7 +31,7 @@ async function verifyAdminAuth(c: any, defaultEnv?: any): Promise<boolean> {
   const token = authHeader.slice(7).trim();
   if (!token) return false;
   try {
-    const secret = getJwtSecret(c, defaultEnv);
+    const secret = getJwtSecret(c);
     const payload = await verify(token, secret, 'HS256');
     return !!(payload && payload.role === 'admin');
   } catch {
@@ -41,7 +39,7 @@ async function verifyAdminAuth(c: any, defaultEnv?: any): Promise<boolean> {
   }
 }
 
-export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, env?: any) {
+export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter) {
   const app = new Hono();
 
   app.use('/api/*', cors({
@@ -52,10 +50,10 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
     maxAge: 86400,
   }));
 
-  const getEnv = (c: any) => getMergedEnv(c, env);
+  const getEnv = (c: any) => getMergedEnv(c);
 
   const requireAdmin = async (c: any, next: () => Promise<void>) => {
-    const isAuthed = await verifyAdminAuth(c, env);
+    const isAuthed = await verifyAdminAuth(c);
     if (!isAuthed) {
       return c.json({ success: false, error: '需要管理员授权，请先登录管理员账户' }, 401);
     }
@@ -201,7 +199,7 @@ export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter, en
   app.get('/api/nodes', async (c) => {
     try {
       const nodes = await storage.getNodes();
-      const isAdmin = await verifyAdminAuth(c, env);
+      const isAdmin = await verifyAdminAuth(c);
       const sanitizedNodes = (nodes || []).map((node: any) => ({
         ...node,
         ip: '***.***.***.***',
@@ -763,7 +761,7 @@ done
 
   // Admin Auth Verify - Checks JWT token or issues signed JWT on password match
   app.get('/api/admin/verify', async (c) => {
-    const isAuthed = await verifyAdminAuth(c, env);
+    const isAuthed = await verifyAdminAuth(c);
     if (isAuthed) {
       return c.json({ success: true, authenticated: true });
     }
@@ -777,7 +775,7 @@ done
 
       // If no password provided, verify existing Authorization Bearer header
       if (!pass) {
-        const isAuthed = await verifyAdminAuth(c, env);
+        const isAuthed = await verifyAdminAuth(c);
         if (isAuthed) {
           const authHeader = c.req.header('Authorization') || '';
           return c.json({ success: true, token: authHeader.slice(7).trim() });
@@ -799,7 +797,7 @@ done
       const isValid = pass === configuredPass;
 
       if (isValid) {
-        const secret = getJwtSecret(c, env);
+        const secret = getJwtSecret(c);
         const exp = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7-day validity
         const token = await sign({ role: 'admin', exp }, secret, 'HS256');
         return c.json({ success: true, token });

@@ -80,7 +80,7 @@ async function getOrInitWorkerContext(env: Bindings): Promise<{
 
   // 5. Initialize or retrieve cached Hono Application Router
   if (!cachedApp) {
-    cachedApp = createApiRouter(cachedStorage, cachedCache, env);
+    cachedApp = createApiRouter(cachedStorage, cachedCache);
   }
 
   // 6. One-time D1 database schema and connection pool initialization with concurrency lock
