@@ -1,4 +1,17 @@
 /**
+ * Resolves Telegram Bot Token from execution context or process environment,
+ * strictly keeping token secrets out of D1 persistence.
+ */
+export function resolveTelegramBotToken(c?: any): string {
+  const runtimeEnv = c && c.env && typeof c.env === 'object' ? c.env : {};
+  return (
+    runtimeEnv.TELEGRAM_BOT_TOKEN ||
+    (typeof process !== 'undefined' && process.env ? process.env.TELEGRAM_BOT_TOKEN : '') ||
+    ''
+  );
+}
+
+/**
  * Safely sanitizes raw text for Telegram HTML mode, escaping unallowed <, >, and &
  * while keeping valid supported tags: <b>, <i>, <code>, <s>, <u>, <pre>, <a>
  */

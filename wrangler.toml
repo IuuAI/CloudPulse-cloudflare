@@ -1,6 +1,6 @@
-name = "cloudpulse-cloudflare-api"
+name = "cloudpulse"
 main = "worker/index.ts"
-compatibility_date = "2025-01-01"
+compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
 
 # 挂载前端打包静态资产 (Cloudflare Workers Static Assets)
@@ -10,13 +10,14 @@ assets = { directory = "./dist" }
 [[d1_databases]]
 binding = "DB"
 database_name = "cloudpulse-d1"
-database_id = "0d30d27f-01db-4c20-b23f-d6940677675c"
+database_id = "REPLACE_ME"
 
 # 2. 边缘高速缓存绑定 (KV)
 [[kv_namespaces]]
 binding = "CACHE"
-id = "1343621be8b64badb66b8ad1f35dea7a"
+id = "REPLACE_ME"
 
-# 3. 每 30 分钟定时巡检探活与告警 Cron Trigger
+# 3. 每 5 分钟定时巡检探活与告警 Cron Trigger
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["*/5 * * * *"]
+

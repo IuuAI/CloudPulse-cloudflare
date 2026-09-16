@@ -13,6 +13,8 @@
     "deploy:worker": "npm run build && wrangler deploy --config wrangler.toml",
     "deploy:pages": "npm run build && wrangler pages deploy dist",
     "clean": "rm -rf dist server.cjs",
+    "db:migrate": "wrangler d1 migrations apply cloudpulse-d1 --local",
+    "db:seed": "wrangler d1 execute cloudpulse-d1 --local --file=./seed/development.sql",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,7 +31,8 @@
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
     "vite": "^6.2.3",
-    "wrangler": "^4.131.1"
+    "wrangler": "^4.131.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260911.1",

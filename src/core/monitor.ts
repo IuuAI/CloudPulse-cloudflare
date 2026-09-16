@@ -1,95 +1,201 @@
-import { StorageAdapter, CacheAdapter } from '../core/types';
-import { sendTelegramNotification } from '../adapters/notifications/TelegramNotifier';
+import { StorageAdapter, CacheAdapter, ServerNode, ServiceItem, NodeStatus } from '../core/types';
+import { sendTelegramNotification, resolveTelegramBotToken } from '../adapters/notifications/TelegramNotifier';
 
-export async function runMonitorCycle(storage: StorageAdapter, cache: CacheAdapter) {
+interface ServiceProbeResult {
+  service: ServiceItem;
+  changed: boolean;
+}
+
+async function probeSingleService(s: ServiceItem): Promise<ServiceProbeResult> {
+  const cloned: ServiceItem = { ...s };
+  let statusChanged = false;
+
+  if (cloned.url && (cloned.url.startsWith('http://') || cloned.url.startsWith('https://'))) {
+    try {
+      const t0 = Date.now();
+      const probeRes = await fetch(cloned.url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(5000),
+      });
+      const latency = Date.now() - t0;
+      const newStatus = !probeRes.ok && probeRes.status >= 500 ? 'degraded' : 'operational';
+
+      if (cloned.status !== newStatus) {
+        statusChanged = true;
+        cloned.status = newStatus;
+      }
+      cloned.latency = latency;
+    } catch {
+      if (cloned.status !== 'degraded' && cloned.status !== 'down') {
+        statusChanged = true;
+        cloned.status = 'degraded';
+      }
+      cloned.latency = 999;
+    }
+  }
+
+  cloned.lastCheck = new Date().toISOString();
+  return {
+    service: cloned,
+    changed: statusChanged,
+  };
+}
+
+export async function runMonitorCycle(storage: StorageAdapter, _cache: CacheAdapter, envContext?: any): Promise<void> {
   const nodes = await storage.getNodes();
   const services = await storage.getServices();
   const quota = await storage.getQuotaSettings();
   const tgConfig = await storage.getTelegramConfig();
+  const botToken = resolveTelegramBotToken(envContext ? { env: envContext } : undefined);
 
-  let healthyCount = 0;
-  let totalLatency = 0;
   const now = Date.now();
-  const heartbeatSeconds = quota?.heartbeatIntervalSeconds || 60;
-  const offlineThresholdMs = Math.max(180, heartbeatSeconds * 3) * 1000;
+  const heartbeatSeconds = (quota?.checkIntervalMinutes || 5) * 60;
+  // Node considered offline if no heartbeat received for > 3.5x heartbeat interval (minimum 180s)
+  const offlineThresholdMs = Math.max(180, heartbeatSeconds * 3.5) * 1000;
 
-  // Real node health evaluation based on heartbeat freshness without random overwriting
+  const changedNodes: ServerNode[] = [];
+  let healthyNodesCount = 0;
+  let totalLatency = 0;
+
+  // 1. Evaluate node health & only write changed nodes
   for (const node of nodes) {
+    const previousStatus = node.status;
     const lastSeenTime = node.lastSeen ? new Date(node.lastSeen).getTime() : 0;
-    const isStale = lastSeenTime > 0 && (now - lastSeenTime > offlineThresholdMs);
+    const isStale = lastSeenTime > 0 && now - lastSeenTime > offlineThresholdMs;
 
+    let targetStatus: NodeStatus = previousStatus;
     if (isStale) {
-      node.status = 'degraded';
-    } else if (!node.status) {
-      node.status = 'healthy';
+      targetStatus = 'offline';
+    } else if (node.cpu > 90 || node.ram > 95) {
+      targetStatus = 'degraded';
+    } else {
+      targetStatus = 'online';
     }
 
-    if (node.status === 'healthy') healthyCount++;
-    totalLatency += (node.ping || 20);
-    await storage.saveNode(node);
-  }
+    if (targetStatus !== previousStatus) {
+      node.status = targetStatus;
+      changedNodes.push(node);
 
-  // Real service health evaluation (probe HTTP/HTTPS url if configured, otherwise preserve state)
-  for (const s of services) {
-    if (s.url && (s.url.startsWith('http://') || s.url.startsWith('https://'))) {
-      try {
-        const t0 = Date.now();
-        const probeRes = await fetch(s.url, { 
-          method: 'HEAD', 
-          signal: AbortSignal.timeout(5000) 
-        });
-        s.latency = Date.now() - t0;
-        s.status = (!probeRes.ok && probeRes.status >= 500) ? 'degraded' : 'operational';
-      } catch {
-        s.status = 'degraded';
-        s.latency = 999;
+      // Record event log on transition
+      if (storage.recordNodeStatusEvent) {
+        await storage.recordNodeStatusEvent({
+          nodeId: node.id,
+          timestamp: new Date().toISOString(),
+          status: targetStatus,
+          reason: isStale ? 'Heartbeat timeout / node unreachable' : 'Status evaluated from cluster metrics',
+        }).catch(() => {});
+      }
+
+      // Telegram notification on status change
+      if (tgConfig.enabled && botToken && tgConfig.chatId && tgConfig.alertOnStatusChange) {
+        const icon = targetStatus === 'online' ? '🟢' : targetStatus === 'degraded' ? '🟡' : '🔴';
+        sendTelegramNotification(
+          botToken,
+          tgConfig.chatId,
+          `${icon} <b>[Node Status Changed]</b>\nNode: <b>${node.name}</b> (${node.region})\nStatus: <b>${previousStatus}</b> ➜ <b>${targetStatus.toUpperCase()}</b>`
+        ).catch(() => {});
       }
     }
-    s.lastCheck = new Date().toISOString();
-    await storage.saveService(s);
+
+    if (node.status === 'online' || node.status === 'healthy') {
+      healthyNodesCount++;
+    }
+    totalLatency += node.ping || 20;
   }
 
-  const avgLatency = Math.round(totalLatency / (nodes.length || 1));
-  const uptime = Number(((healthyCount / (nodes.length || 1)) * 99.99).toFixed(2));
+  // Batch persist changed nodes only (avoids wasteful D1 writes)
+  if (changedNodes.length > 0) {
+    if (storage.saveNodes) {
+      await storage.saveNodes(changedNodes);
+    } else {
+      for (const n of changedNodes) {
+        await storage.saveNode(n);
+      }
+    }
+  }
+
+  // 2. Parallel HTTP/HTTPS service probing with Promise.allSettled
+  const probeSettled = await Promise.allSettled(services.map((s) => probeSingleService(s)));
+  const updatedServices: ServiceItem[] = [];
+  const changedServices: ServiceItem[] = [];
+
+  for (const item of probeSettled) {
+    if (item.status === 'fulfilled') {
+      const { service, changed } = item.value;
+      updatedServices.push(service);
+      if (changed) {
+        changedServices.push(service);
+        if (tgConfig.enabled && tgConfig.botToken && tgConfig.chatId && tgConfig.alertOnStatusChange) {
+          sendTelegramNotification(
+            tgConfig.botToken,
+            tgConfig.chatId,
+            `⚠️ <b>[Service Status Changed]</b>\nService: <b>${service.name}</b>\nStatus: <b>${service.status.toUpperCase()}</b>\nLatency: ${service.latency}ms`
+          ).catch(() => {});
+        }
+      }
+    }
+  }
+
+  // Batch persist changed services or updated check times
+  if (changedServices.length > 0) {
+    if (storage.saveServices) {
+      await storage.saveServices(changedServices);
+    } else {
+      for (const s of changedServices) {
+        await storage.saveService(s);
+      }
+    }
+  }
+
+  // 3. Real Uptime & System Overview Calculation
+  const avgLatency = nodes.length > 0 ? Math.round(totalLatency / nodes.length) : 0;
+  const operationalServicesCount = updatedServices.filter((s) => s.status === 'operational').length;
+  const totalElements = nodes.length + updatedServices.length;
+  const healthyElements = healthyNodesCount + operationalServicesCount;
+
+  // Real availability sample percentage across nodes and services
+  const clusterUptime = totalElements > 0
+    ? Number(((healthyElements / totalElements) * 100).toFixed(2))
+    : 100.0;
+
   const incidents = await storage.getIncidents();
-  const activeIncidents = incidents.filter(i => i.status !== 'resolved').length;
+  const activeIncidents = incidents.filter((i) => i.status !== 'resolved').length;
 
   const overview = {
-    uptime,
+    uptime: clusterUptime,
     totalNodes: nodes.length,
-    healthyNodes: healthyCount,
+    healthyNodes: healthyNodesCount,
     activeIncidents,
     avgLatency,
-    lastChecked: new Date().toISOString()
+    lastChecked: new Date().toISOString(),
   };
   await storage.saveOverview(overview);
 
-  // Append metric history point with standard ISO 8601 timestamp for proper retention pruning
+  // 4. Record Metrics History Point
   const isoTimestamp = new Date().toISOString();
-  const avgCpu = Math.round(nodes.reduce((acc, n) => acc + (n.cpu || 0), 0) / (nodes.length || 1));
-  const avgRam = Math.round(nodes.reduce((acc, n) => acc + (n.ram || 0), 0) / (nodes.length || 1));
-  
+  const avgCpu = nodes.length > 0 ? Math.round(nodes.reduce((acc, n) => acc + (n.cpu || 0), 0) / nodes.length) : 0;
+  const avgRam = nodes.length > 0 ? Math.round(nodes.reduce((acc, n) => acc + (n.ram || 0), 0) / nodes.length) : 0;
+
   await storage.saveMetricPoint({
     timestamp: isoTimestamp,
-    avgLatency,
-    cpuLoad: avgCpu,
-    ramLoad: avgRam,
-    p95Latency: Math.round(avgLatency * 1.35)
+    latency: avgLatency,
+    cpu: avgCpu,
+    ram: avgRam,
   });
 
-  // Auto prune if enabled
-  if (quota.autoPruneExpiredHistory) {
-    await storage.pruneHistory(quota.historyRetentionDays);
+  // 5. Automatic retention pruning
+  if (quota.autoPruneEnabled && quota.historyRetentionDays) {
+    await storage.pruneHistory(quota.historyRetentionDays).catch(() => {});
   }
 
-  // Send Telegram notification if high load or status changed
-  if (tgConfig.enabled && tgConfig.botToken && tgConfig.chatId) {
-    if (avgCpu > 85 && tgConfig.alertOnHighLoad) {
-      await sendTelegramNotification(
-        tgConfig.botToken,
+  // 6. High load alerts
+  if (tgConfig.enabled && botToken && tgConfig.chatId && tgConfig.alertOnHighLoad) {
+    if (avgCpu > 85) {
+      sendTelegramNotification(
+        botToken,
         tgConfig.chatId,
-        `⚠️ <b>[CloudPulse High Load Alert]</b>\nAverage Cluster CPU is at <b>${avgCpu}%</b>.\nPlease check infrastructure nodes.`
-      );
+        `⚠️ <b>[CloudPulse High Load Alert]</b>\nAverage Cluster CPU is at <b>${avgCpu}%</b>.\nPlease check active server nodes.`
+      ).catch(() => {});
     }
   }
 }

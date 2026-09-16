@@ -1,18 +1,28 @@
-import { StorageAdapter } from '../../core/types';
-const fallbackServices: any[] = [
+import {
+  StorageAdapter,
+  ServerNode,
+  ServiceItem,
+  IncidentItem,
+  MetricHistoryPoint,
+  NodeStatusEvent,
+  OverviewStats,
+  TelegramConfig,
+  TelegramLog,
+  QuotaSettings,
+  AdminAuthRecord,
+} from '../../core/types';
+
+const fallbackServices: ServiceItem[] = [
   {
     id: 'gateway',
     name: 'Global API Gateway',
     category: 'Core',
     status: 'operational',
     latency: 28,
+    uptime: 99.99,
     uptime30d: 99.99,
     lastCheck: new Date().toISOString(),
     description: 'Cloudflare Anycast 边缘路由网关与反向代理',
-    uptimeHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
-      status: 'operational' as const,
-    })),
   },
   {
     id: 'auth',
@@ -20,13 +30,10 @@ const fallbackServices: any[] = [
     category: 'Auth',
     status: 'operational',
     latency: 45,
+    uptime: 99.95,
     uptime30d: 99.95,
     lastCheck: new Date().toISOString(),
     description: '鉴权中心与管理员令牌验证服务',
-    uptimeHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
-      status: 'operational' as const,
-    })),
   },
   {
     id: 'db-cluster',
@@ -34,13 +41,10 @@ const fallbackServices: any[] = [
     category: 'Database',
     status: 'operational',
     latency: 15,
+    uptime: 99.99,
     uptime30d: 99.99,
     lastCheck: new Date().toISOString(),
     description: '高可用持久化存储引擎 (SQLite / Cloudflare D1)',
-    uptimeHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
-      status: 'operational' as const,
-    })),
   },
   {
     id: 'storage',
@@ -48,13 +52,10 @@ const fallbackServices: any[] = [
     category: 'Storage',
     status: 'operational',
     latency: 38,
+    uptime: 99.90,
     uptime30d: 99.90,
     lastCheck: new Date().toISOString(),
     description: '数据备份存档与静态多媒体资源桶',
-    uptimeHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
-      status: 'operational' as const,
-    })),
   },
   {
     id: 'ai-engine',
@@ -62,17 +63,14 @@ const fallbackServices: any[] = [
     category: 'AI',
     status: 'operational',
     latency: 120,
+    uptime: 99.85,
     uptime30d: 99.85,
     lastCheck: new Date().toISOString(),
     description: '智能监控事件聚合与故障自动化分析代理',
-    uptimeHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10),
-      status: 'operational' as const,
-    })),
   },
 ];
 
-const fallbackNodes: any[] = [
+const fallbackNodes: ServerNode[] = [
   {
     id: 'n1',
     name: 'Edge-Tokyo-01',
@@ -85,12 +83,14 @@ const fallbackNodes: any[] = [
     networkIn: '1.2 TB',
     networkOut: '4.5 TB',
     ping: 18,
-    uptime: '45d 12h',
+    uptime: 99.99,
     os: 'Ubuntu 24.04 LTS (x86_64)',
+    lastSeen: new Date().toISOString(),
     lastHeartbeat: new Date().toISOString(),
     tags: ['Asia', 'Edge', 'Gateway'],
+    probeInstalled: true,
     probeToken: 'tok-tokyo-01',
-    flagEmoji: '🇯🇵',
+    probeTokenHash: '4126bb62e92c4749f7e532b21aa6c464ef69d4e5f7f98502f92f254b3d735070',
   },
   {
     id: 'n2',
@@ -104,12 +104,14 @@ const fallbackNodes: any[] = [
     networkIn: '2.8 TB',
     networkOut: '9.1 TB',
     ping: 29,
-    uptime: '62d 08h',
+    uptime: 99.95,
     os: 'Debian 12 Bookworm',
+    lastSeen: new Date().toISOString(),
     lastHeartbeat: new Date().toISOString(),
     tags: ['Europe', 'Core', 'Cluster'],
-    probeToken: 'tok-frankfurt-01',
-    flagEmoji: '🇩🇪',
+    probeInstalled: true,
+    probeToken: 'tok-fra-01',
+    probeTokenHash: '1f5e27a94d0c9a62aa87d65fc97ecdf3351ec8a48b594b150fe1844b26fe78dc',
   },
   {
     id: 'n3',
@@ -123,12 +125,14 @@ const fallbackNodes: any[] = [
     networkIn: '4.1 TB',
     networkOut: '12.4 TB',
     ping: 41,
-    uptime: '38d 19h',
+    uptime: 99.92,
     os: 'Alpine Linux 3.20',
+    lastSeen: new Date().toISOString(),
     lastHeartbeat: new Date().toISOString(),
     tags: ['US-West', 'Edge'],
-    probeToken: 'tok-sanjose-01',
-    flagEmoji: '🇺🇸',
+    probeInstalled: true,
+    probeToken: 'tok-sjc-01',
+    probeTokenHash: 'b4f8d55c7075c2e9a263d91cf97cf8e11a6ef5a882cb12d93eefae9b3806fca4',
   },
   {
     id: 'n4',
@@ -142,12 +146,14 @@ const fallbackNodes: any[] = [
     networkIn: '1.9 TB',
     networkOut: '6.0 TB',
     ping: 22,
-    uptime: '51d 04h',
+    uptime: 99.98,
     os: 'Ubuntu 24.04 LTS',
+    lastSeen: new Date().toISOString(),
     lastHeartbeat: new Date().toISOString(),
     tags: ['Asia-SE', 'Edge'],
-    probeToken: 'tok-singapore-01',
-    flagEmoji: '🇸🇬',
+    probeInstalled: true,
+    probeToken: 'tok-sin-01',
+    probeTokenHash: '1ca8e4a77cecf709f6e4d4aa1525048db49b10ee7aafe6cf6e154f85e4922eb4',
   },
   {
     id: 'n5',
@@ -161,12 +167,14 @@ const fallbackNodes: any[] = [
     networkIn: '850 GB',
     networkOut: '2.1 TB',
     ping: 85,
-    uptime: '28d 14h',
+    uptime: 99.80,
     os: 'Debian 12',
+    lastSeen: new Date().toISOString(),
     lastHeartbeat: new Date().toISOString(),
     tags: ['SA', 'Edge'],
-    probeToken: 'tok-saopaulo-01',
-    flagEmoji: '🇧🇷',
+    probeInstalled: true,
+    probeToken: 'tok-sao-01',
+    probeTokenHash: 'e2bf4e59f4f494dcfe6264f3fb0477174668b556942004245fcfead7baefc45d',
   },
   {
     id: 'n6',
@@ -180,54 +188,43 @@ const fallbackNodes: any[] = [
     networkIn: '1.1 TB',
     networkOut: '3.8 TB',
     ping: 52,
-    uptime: '40d 22h',
-    os: 'Ubuntu 24.04 LTS',
+    uptime: 99.94,
+    os: 'Ubuntu 22.04 LTS',
+    lastSeen: new Date().toISOString(),
     lastHeartbeat: new Date().toISOString(),
     tags: ['Oceania', 'Edge'],
-    probeToken: 'tok-sydney-01',
-    flagEmoji: '🇦🇺',
+    probeInstalled: true,
+    probeToken: 'tok-syd-01',
+    probeTokenHash: '7ee7ef2fc42da0db7c82aee65814bfb9f67a296d8e2023ec5f470559f5b610c3',
   },
 ];
 
-const fallbackMetricsHistory: any[] = Array.from({ length: 24 }, (_, i) => {
+const fallbackMetricsHistory: MetricHistoryPoint[] = Array.from({ length: 24 }, (_, i) => {
   const d = new Date(Date.now() - (23 - i) * 3600000);
-  const timeLabel = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return {
     timestamp: d.toISOString(),
-    timeLabel,
-    avgCpu: Math.floor(25 + Math.sin(i / 3) * 12 + Math.random() * 5),
-    avgRam: Math.floor(48 + Math.cos(i / 4) * 8 + Math.random() * 4),
-    peakCpu: Math.floor(45 + Math.random() * 15),
-    peakRam: Math.floor(65 + Math.random() * 10),
-    activeNodes: 6,
-    avgLatency: Math.floor(30 + Math.sin(i / 2) * 8 + Math.random() * 4),
-    p95Latency: Math.floor(55 + Math.random() * 15),
+    cpu: Math.floor(25 + Math.sin(i / 3) * 12 + Math.random() * 5),
+    ram: Math.floor(48 + Math.cos(i / 4) * 8 + Math.random() * 4),
+    latency: Math.floor(30 + Math.sin(i / 2) * 8 + Math.random() * 4),
   };
 });
 
 export class MemoryStorageAdapter implements StorageAdapter {
-  private overview: any = {
+  private overview: OverviewStats = {
     uptime: 99.98,
     totalNodes: 6,
     healthyNodes: 6,
     activeIncidents: 0,
     avgLatency: 32,
     lastChecked: new Date().toISOString(),
-    overallStatus: 'all_good',
-    uptime30d: 99.98,
-    totalServices: 5,
-    operationalServices: 5,
-    onlineNodes: 6,
-    activeIncidentsCount: 0,
-    telegramConfigured: false,
-    lastUpdated: new Date().toISOString(),
   };
 
-  private services: any[] = JSON.parse(JSON.stringify(fallbackServices));
-  private nodes: any[] = JSON.parse(JSON.stringify(fallbackNodes));
-  private incidents: any[] = [];
-  private metricsHistory: any[] = JSON.parse(JSON.stringify(fallbackMetricsHistory));
-  private telegramConfig: any = {
+  private services: ServiceItem[] = JSON.parse(JSON.stringify(fallbackServices));
+  private nodes: ServerNode[] = JSON.parse(JSON.stringify(fallbackNodes));
+  private incidents: IncidentItem[] = [];
+  private metricsHistory: MetricHistoryPoint[] = JSON.parse(JSON.stringify(fallbackMetricsHistory));
+  private nodeEvents: NodeStatusEvent[] = [];
+  private telegramConfig: TelegramConfig = {
     botToken: '',
     chatId: '',
     enabled: false,
@@ -237,30 +234,31 @@ export class MemoryStorageAdapter implements StorageAdapter {
     dailyDigest: false,
     digestTime: '08:00',
   };
-  private telegramLogs: any[] = [];
-  private quotaSettings: any = {
-    workerDailyRequestLimit: 100000,
+  private telegramLogs: TelegramLog[] = [];
+  private quotaSettings: QuotaSettings = {
+    d1ReadLimitDaily: 5000000,
+    d1WriteLimitDaily: 100000,
+    kvReadLimitDaily: 100000,
+    kvWriteLimitDaily: 1000,
     historyRetentionDays: 30,
-    ecoMode: true,
-    autoPruneExpiredHistory: true,
-    heartbeatIntervalSeconds: 60,
-    clientPollIntervalSeconds: 30,
-    maxStoredMetricPoints: 720,
+    checkIntervalMinutes: 5,
+    autoPruneEnabled: true,
   };
+  private adminAuth: AdminAuthRecord | null = null;
 
-  async getOverview(): Promise<any> {
+  async getOverview(): Promise<OverviewStats> {
     return { ...this.overview, lastChecked: new Date().toISOString() };
   }
 
-  async saveOverview(overview: any): Promise<void> {
+  async saveOverview(overview: OverviewStats): Promise<void> {
     this.overview = { ...this.overview, ...overview };
   }
 
-  async getServices(): Promise<any[]> {
+  async getServices(): Promise<ServiceItem[]> {
     return [...this.services];
   }
 
-  async saveService(service: any): Promise<void> {
+  async saveService(service: ServiceItem): Promise<void> {
     const idx = this.services.findIndex((s) => s.id === service.id);
     if (idx >= 0) {
       this.services[idx] = { ...this.services[idx], ...service };
@@ -269,15 +267,28 @@ export class MemoryStorageAdapter implements StorageAdapter {
     }
   }
 
+  async saveServices(services: ServiceItem[]): Promise<void> {
+    for (const s of services) {
+      await this.saveService(s);
+    }
+  }
+
   async deleteService(id: string): Promise<void> {
     this.services = this.services.filter((s) => s.id !== id);
   }
 
-  async getNodes(): Promise<any[]> {
+  async getNodes(): Promise<ServerNode[]> {
     return [...this.nodes];
   }
 
-  async saveNode(node: any): Promise<void> {
+  async getNodeByProbeTokenHash(tokenHash: string): Promise<ServerNode | null> {
+    const node = this.nodes.find(
+      (n) => n.probeTokenHash === tokenHash || n.probeToken === tokenHash
+    );
+    return node ? { ...node } : null;
+  }
+
+  async saveNode(node: ServerNode): Promise<void> {
     const idx = this.nodes.findIndex((n) => n.id === node.id);
     if (idx >= 0) {
       this.nodes[idx] = { ...this.nodes[idx], ...node };
@@ -286,15 +297,39 @@ export class MemoryStorageAdapter implements StorageAdapter {
     }
   }
 
+  async saveNodes(nodes: ServerNode[]): Promise<void> {
+    for (const n of nodes) {
+      await this.saveNode(n);
+    }
+  }
+
   async deleteNode(id: string): Promise<void> {
     this.nodes = this.nodes.filter((n) => n.id !== id);
   }
 
-  async getIncidents(): Promise<any[]> {
+  async recordNodeStatusEvent(event: NodeStatusEvent): Promise<void> {
+    this.nodeEvents.unshift({
+      id: this.nodeEvents.length + 1,
+      ...event,
+    });
+    if (this.nodeEvents.length > 500) {
+      this.nodeEvents = this.nodeEvents.slice(0, 500);
+    }
+  }
+
+  async getNodeStatusEvents(nodeId?: string, limit: number = 100): Promise<NodeStatusEvent[]> {
+    let filtered = this.nodeEvents;
+    if (nodeId) {
+      filtered = filtered.filter((e) => e.nodeId === nodeId);
+    }
+    return filtered.slice(0, limit);
+  }
+
+  async getIncidents(): Promise<IncidentItem[]> {
     return [...this.incidents];
   }
 
-  async saveIncident(incident: any): Promise<void> {
+  async saveIncident(incident: IncidentItem): Promise<void> {
     const idx = this.incidents.findIndex((i) => i.id === incident.id);
     if (idx >= 0) {
       this.incidents[idx] = { ...this.incidents[idx], ...incident };
@@ -307,81 +342,56 @@ export class MemoryStorageAdapter implements StorageAdapter {
     this.incidents = this.incidents.filter((i) => i.id !== id);
   }
 
-  async getMetricsHistory(): Promise<any[]> {
-    return this.metricsHistory.slice(-200);
+  async getMetricsHistory(): Promise<MetricHistoryPoint[]> {
+    return [...this.metricsHistory];
   }
 
-  async saveMetricPoint(point: any): Promise<void> {
+  async saveMetricPoint(point: MetricHistoryPoint): Promise<void> {
     this.metricsHistory.push(point);
-    if (this.metricsHistory.length > 720) {
-      this.metricsHistory.shift();
+    if (this.metricsHistory.length > 200) {
+      this.metricsHistory = this.metricsHistory.slice(-200);
     }
   }
 
-  async getTelegramConfig(): Promise<any> {
+  async getTelegramConfig(): Promise<TelegramConfig> {
     return { ...this.telegramConfig };
   }
 
-  async saveTelegramConfig(config: any): Promise<void> {
+  async saveTelegramConfig(config: TelegramConfig): Promise<void> {
     this.telegramConfig = { ...this.telegramConfig, ...config };
   }
 
-  async getTelegramLogs(): Promise<any[]> {
+  async getTelegramLogs(): Promise<TelegramLog[]> {
     return [...this.telegramLogs];
   }
 
-  async saveTelegramLog(log: any): Promise<void> {
+  async saveTelegramLog(log: TelegramLog): Promise<void> {
     this.telegramLogs.unshift(log);
-    if (this.telegramLogs.length > 100) {
-      this.telegramLogs.pop();
+    if (this.telegramLogs.length > 50) {
+      this.telegramLogs = this.telegramLogs.slice(0, 50);
     }
   }
 
-  async getQuotaSettings(): Promise<any> {
+  async getQuotaSettings(): Promise<QuotaSettings> {
     return { ...this.quotaSettings };
   }
 
-  async saveQuotaSettings(settings: any): Promise<void> {
+  async saveQuotaSettings(settings: QuotaSettings): Promise<void> {
     this.quotaSettings = { ...this.quotaSettings, ...settings };
   }
 
-  private adminAuth: { passwordHash: string; salt: string; updatedAt: string } | null = null;
-
-  async getAdminAuth(): Promise<{ passwordHash: string; salt: string; updatedAt: string } | null> {
+  async getAdminAuth(): Promise<AdminAuthRecord | null> {
     return this.adminAuth ? { ...this.adminAuth } : null;
   }
 
-  async saveAdminAuth(auth: { passwordHash: string; salt: string; updatedAt: string }): Promise<void> {
+  async saveAdminAuth(auth: AdminAuthRecord): Promise<void> {
     this.adminAuth = { ...auth };
-  }
-
-  async getD1UsageStats(): Promise<any> {
-    const readLimit = 5000000;
-    const writeLimit = 100000;
-    const storageLimitBytes = 5 * 1024 * 1024 * 1024;
-    const totalRows = this.services.length + this.nodes.length + this.incidents.length + this.metricsHistory.length + this.telegramLogs.length;
-    const storageBytes = 64 * 1024 + totalRows * 320;
-    return {
-      dailyRowsRead: 1680,
-      readLimit,
-      dailyRowsWritten: 320,
-      writeLimit,
-      storageBytes,
-      storageLimitBytes,
-      totalTables: 9,
-      totalRows,
-      readUsagePercent: 0.03,
-      writeUsagePercent: 0.32,
-      storageUsagePercent: 0.01,
-    };
   }
 
   async pruneHistory(retentionDays: number): Promise<number> {
     const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
-    const initialLen = this.metricsHistory.length;
-    this.metricsHistory = this.metricsHistory.filter(
-      (m: any) => typeof m.timestamp === 'string' && /^\d{4}-\d{2}-\d{2}/.test(m.timestamp) && m.timestamp >= cutoff
-    );
-    return initialLen - this.metricsHistory.length;
+    const initial = this.metricsHistory.length;
+    this.metricsHistory = this.metricsHistory.filter((m) => m.timestamp >= cutoff);
+    return initial - this.metricsHistory.length;
   }
 }
