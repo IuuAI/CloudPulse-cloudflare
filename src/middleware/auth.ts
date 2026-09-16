@@ -72,7 +72,7 @@ export async function verifyPassword(
     try {
       const adminAuth = await storage.getAdminAuth();
       if (adminAuth && adminAuth.passwordHash && adminAuth.salt) {
-        const computedHash = await hashPassword(password, adminAuth.salt);
+        const computedHash = await hashPassword(password.trim(), adminAuth.salt);
         if (computedHash === adminAuth.passwordHash) {
           return true;
         }
