@@ -44,6 +44,24 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
         return c.json({ success: false, error: '密码错误或管理员账户尚未初始化' }, 401);
       }
 
+      // Auto-initialize admin_auth in D1 database on first successful login if empty
+      if (storage.getAdminAuth && storage.saveAdminAuth) {
+        try {
+          const existingAuth = await storage.getAdminAuth().catch(() => null);
+          if (!existingAuth) {
+            const salt = generateSalt();
+            const passwordHash = await hashPassword(password.trim(), salt);
+            await storage.saveAdminAuth({
+              passwordHash,
+              salt,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (e) {
+          console.warn('Auto-initializing admin_auth record failed gracefully:', e);
+        }
+      }
+
       let secret: string;
       try {
         secret = getJwtSecret(c);
