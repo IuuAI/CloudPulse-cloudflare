@@ -267,35 +267,51 @@ export async function verifyAdminAuth(password?: string): Promise<boolean> {
   if (!password && !token) return false;
 
   const passwordHash = password ? await computeSha256(password) : undefined;
-  const res = await fetch('/api/admin/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password, passwordHash, clientEncrypted: true }),
-  });
-  if (!res.ok) {
-    if (!password) localStorage.removeItem('cloudpulse_admin_token');
+  try {
+    const res = await fetch('/api/admin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, passwordHash, clientEncrypted: true }),
+    });
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      console.warn(`[Admin Verification Failed] HTTP ${res.status}: ${errorText}`);
+      if (!password) localStorage.removeItem('cloudpulse_admin_token');
+      return false;
+    }
+    const data: any = await res.json();
+    if (data.success) {
+      if (data.token) {
+        localStorage.setItem('cloudpulse_admin_token', data.token);
+      }
+      return true;
+    }
+    return false;
+  } catch (err: any) {
+    console.error('[Admin Verification Error]', err);
     return false;
   }
-  const data: any = await res.json();
-  if (data.success) {
-    if (data.token) {
-      localStorage.setItem('cloudpulse_admin_token', data.token);
-    }
-    return true;
-  }
-  return false;
 }
 
 export async function adminLogin(password: string): Promise<any> {
   const passwordHash = await computeSha256(password);
-  const res = await fetch('/api/admin/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password, passwordHash, clientEncrypted: true }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/admin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, passwordHash, clientEncrypted: true }),
+    });
+  } catch (netErr: any) {
+    throw new Error(`网络无法连接到后端 API (HTTP 0): ${netErr.message || 'NetworkError'}`);
+  }
+
   const data: any = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) {
-    throw new Error(data.error || '登录失败，请检查管理员密码');
+    const statusText = `HTTP ${res.status}`;
+    const serverErr = data.error || (data.message ? `${data.error}: ${data.message}` : undefined);
+    const detailMsg = serverErr ? `[${statusText}] ${serverErr}` : `[${statusText}] 登录验证失败，请检查密码或 Cloudflare 变量`;
+    throw new Error(detailMsg);
   }
   if (data.token) {
     localStorage.setItem('cloudpulse_admin_token', data.token);
