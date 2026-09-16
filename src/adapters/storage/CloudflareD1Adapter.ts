@@ -194,7 +194,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
           last_updated TEXT NOT NULL
         )`,
         `CREATE TABLE IF NOT EXISTS admin_auth (
-          id INTEGER PRIMARY KEY CHECK (id = 1),
+          id TEXT PRIMARY KEY,
           password_hash TEXT NOT NULL,
           salt TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -813,7 +813,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
     await this.ensureInitialized();
     this.recordRead(1);
     try {
-      const { results } = await this.db!.prepare('SELECT * FROM admin_auth WHERE id = 1').all();
+      const { results } = await this.db!.prepare('SELECT * FROM admin_auth WHERE id = 1 OR id = ?').bind('1').all();
       if (!results || results.length === 0) return null;
       const r = results[0] as any;
       return {
@@ -833,7 +833,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
       .prepare(
         `
       INSERT INTO admin_auth (id, password_hash, salt, updated_at)
-      VALUES (1, ?, ?, ?)
+      VALUES ('1', ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET 
         password_hash = excluded.password_hash,
         salt = excluded.salt,

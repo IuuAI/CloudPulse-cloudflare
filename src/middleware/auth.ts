@@ -59,21 +59,29 @@ export async function verifyPassword(
 ): Promise<boolean> {
   if (!password || typeof password !== 'string') return false;
 
-  // 1. Check D1 / Persistent Storage admin credentials
+  const cleanEnvPass = envFallbackPassword && typeof envFallbackPassword === 'string' ? envFallbackPassword.trim() : undefined;
+
+  // 1. Check D1 / Persistent Storage admin credentials if record exists
   if (storage.getAdminAuth) {
-    const adminAuth = await storage.getAdminAuth();
-    if (adminAuth && adminAuth.passwordHash && adminAuth.salt) {
-      const computedHash = await hashPassword(password, adminAuth.salt);
-      return computedHash === adminAuth.passwordHash;
+    try {
+      const adminAuth = await storage.getAdminAuth();
+      if (adminAuth && adminAuth.passwordHash && adminAuth.salt) {
+        const computedHash = await hashPassword(password, adminAuth.salt);
+        if (computedHash === adminAuth.passwordHash) {
+          return true;
+        }
+      }
+    } catch {
+      // Fall through to env fallback if DB query errors out
     }
   }
 
   // 2. Check explicit runtime environment secret if configured
-  if (envFallbackPassword && typeof envFallbackPassword === 'string' && envFallbackPassword.trim().length > 0) {
-    return password === envFallbackPassword.trim();
+  if (cleanEnvPass && cleanEnvPass.length > 0) {
+    return password.trim() === cleanEnvPass;
   }
 
-  // 3. If neither database credentials nor env secret are configured, reject authentication
+  // 3. If neither database credentials nor env secret match, reject authentication
   return false;
 }
 
