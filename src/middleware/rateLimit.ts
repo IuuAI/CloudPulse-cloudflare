@@ -28,8 +28,20 @@ export function getClientIp(c: Context): string {
   return '127.0.0.1';
 }
 
+// In-memory sliding window store to save KV daily write quota
+const memoryRateLimitStore = new Map<string, { count: number; expiresAt: number }>();
+
+function cleanupMemoryRateLimitStore() {
+  const now = Math.floor(Date.now() / 1000);
+  for (const [k, v] of memoryRateLimitStore.entries()) {
+    if (v.expiresAt <= now) {
+      memoryRateLimitStore.delete(k);
+    }
+  }
+}
+
 /**
- * Factory for cache-backed sliding window rate limiters
+ * Factory for memory + cache sliding window rate limiters
  */
 export function createRateLimiter(cache: CacheAdapter, config: RateLimitConfig) {
   const {
@@ -51,7 +63,18 @@ export function createRateLimiter(cache: CacheAdapter, config: RateLimitConfig) 
       const windowBucket = Math.floor(now / windowSeconds);
       const cacheKey = `ratelimit:${keyPrefix}:${keyId}:${windowBucket}`;
 
-      const currentCount = (await cache.get<number>(cacheKey)) || 0;
+      // 1. Check in-memory store first (Zero KV reads/writes)
+      cleanupMemoryRateLimitStore();
+      const memRecord = memoryRateLimitStore.get(cacheKey);
+      let currentCount = memRecord ? memRecord.count : 0;
+
+      // 2. Fallback to cache layer if not in memory
+      if (!memRecord) {
+        const cachedCount = await cache.get<number>(cacheKey).catch(() => null);
+        if (typeof cachedCount === 'number') {
+          currentCount = cachedCount;
+        }
+      }
 
       if (currentCount >= maxRequests) {
         c.header('Retry-After', String(windowSeconds));
@@ -71,7 +94,11 @@ export function createRateLimiter(cache: CacheAdapter, config: RateLimitConfig) 
       }
 
       const nextCount = currentCount + 1;
-      await cache.set(cacheKey, nextCount, windowSeconds * 2);
+      const expiresAt = (windowBucket + 2) * windowSeconds;
+      memoryRateLimitStore.set(cacheKey, { count: nextCount, expiresAt });
+
+      // Synchronize with KV/Cache asynchronously without blocking or failing if KV 429 occurs
+      cache.set(cacheKey, nextCount, windowSeconds * 2).catch(() => {});
 
       c.header('X-RateLimit-Limit', String(maxRequests));
       c.header('X-RateLimit-Remaining', String(Math.max(0, maxRequests - nextCount)));
@@ -79,7 +106,6 @@ export function createRateLimiter(cache: CacheAdapter, config: RateLimitConfig) 
 
       return await next();
     } catch {
-      // In case of cache errors, gracefully proceed to avoid dropping legitimate traffic
       return await next();
     }
   };

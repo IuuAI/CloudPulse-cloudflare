@@ -28,15 +28,19 @@ export class CloudflareKVAdapter implements CacheAdapter {
   }
 
   async get(key: string): Promise<any> {
-    this.checkBinding();
+    if (!this.kv) return null;
     this.ensureCurrentDay();
     this.dailyReads++;
-    const val = await this.kv!.get(key, 'json');
-    return val;
+    try {
+      const val = await this.kv.get(key, 'json');
+      return val;
+    } catch {
+      return null;
+    }
   }
 
   async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
-    this.checkBinding();
+    if (!this.kv) return;
     this.ensureCurrentDay();
     this.dailyWrites++;
     this.keySet.add(key);
@@ -46,17 +50,23 @@ export class CloudflareKVAdapter implements CacheAdapter {
 
     const options: KVNamespacePutOptions = {};
     if (ttlSeconds) {
-      options.expirationTtl = ttlSeconds;
+      options.expirationTtl = Math.max(60, ttlSeconds);
     }
-    await this.kv!.put(key, valStr, options);
+    try {
+      await this.kv.put(key, valStr, options);
+    } catch {
+      // Gracefully ignore write failures (e.g. rate limits 429)
+    }
   }
 
   async delete(key: string): Promise<void> {
-    this.checkBinding();
+    if (!this.kv) return;
     this.ensureCurrentDay();
     this.dailyDeletes++;
     this.keySet.delete(key);
-    await this.kv!.delete(key);
+    try {
+      await this.kv.delete(key);
+    } catch {}
   }
 
   async getKVUsageStats(): Promise<CloudflareKVUsageStats> {
