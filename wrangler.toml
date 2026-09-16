@@ -19,5 +19,5 @@ id = "1343621be8b64badb66b8ad1f35dea7a"
 
 # 3. 每 5 分钟定时巡检探活与告警 Cron Trigger
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/10 * * * *"]
 
