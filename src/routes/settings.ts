@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { StorageAdapter, CacheAdapter, QuotaSettings } from '../core/types';
-import { requireAdmin } from '../middleware/auth';
+import { createRequireAdminMiddleware } from '../middleware/auth';
 import { runMonitorCycle } from '../core/monitor';
 import { QuotaSettingsSchema } from '../core/schemas';
 
 export function createSettingsRoutes(storage: StorageAdapter, cache: CacheAdapter) {
   const router = new Hono();
+  const requireAdmin = createRequireAdminMiddleware(storage);
 
   // Quota Settings & Usage
   router.get('/api/settings/quota', async (c) => {

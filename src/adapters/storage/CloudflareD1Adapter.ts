@@ -197,11 +197,19 @@ export class CloudflareD1Adapter implements StorageAdapter {
           id TEXT PRIMARY KEY,
           password_hash TEXT NOT NULL,
           salt TEXT NOT NULL,
-          updated_at TEXT NOT NULL
+          updated_at TEXT NOT NULL,
+          token_version INTEGER NOT NULL DEFAULT 1
         )`,
       ];
 
       await this.db!.batch(tableStatements.map((sql) => this.db!.prepare(sql)));
+
+      // Migration check: ensure token_version column exists if table was created previously
+      try {
+        await this.db!.prepare('ALTER TABLE admin_auth ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1').run();
+      } catch {
+        // Column already exists or table freshly created
+      }
 
       // Indexes creation
       const indexStatements = [
@@ -820,6 +828,7 @@ export class CloudflareD1Adapter implements StorageAdapter {
         passwordHash: r.password_hash,
         salt: r.salt,
         updatedAt: r.updated_at,
+        tokenVersion: typeof r.token_version === 'number' ? r.token_version : 1,
       };
     } catch {
       return null;
@@ -829,18 +838,20 @@ export class CloudflareD1Adapter implements StorageAdapter {
   async saveAdminAuth(auth: AdminAuthRecord): Promise<void> {
     await this.ensureInitialized();
     this.recordWrite(1);
+    const version = typeof auth.tokenVersion === 'number' ? auth.tokenVersion : 1;
     await this.db!
       .prepare(
         `
-      INSERT INTO admin_auth (id, password_hash, salt, updated_at)
-      VALUES ('1', ?, ?, ?)
+      INSERT INTO admin_auth (id, password_hash, salt, updated_at, token_version)
+      VALUES ('1', ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET 
         password_hash = excluded.password_hash,
         salt = excluded.salt,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        token_version = excluded.token_version
     `
       )
-      .bind(auth.passwordHash, auth.salt, auth.updatedAt)
+      .bind(auth.passwordHash, auth.salt, auth.updatedAt, version)
       .run();
   }
 

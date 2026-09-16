@@ -1,18 +1,25 @@
 import { Hono } from 'hono';
 import { StorageAdapter, CacheAdapter, ServerNode } from '../core/types';
-import { requireAdmin, getJwtSecret } from '../middleware/auth';
+import { createRequireAdminMiddleware, getJwtSecret } from '../middleware/auth';
 import { verify } from 'hono/jwt';
 import { CreateNodeSchema, UpdateNodeSchema } from '../core/schemas';
 
-async function isCallerAdmin(c: any): Promise<boolean> {
+async function isCallerAdmin(c: any, storage: StorageAdapter): Promise<boolean> {
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) return false;
   const token = authHeader.substring(7).trim();
   if (!token) return false;
   try {
     const secret = getJwtSecret(c);
-    const payload = await verify(token, secret, 'HS256');
-    return Boolean(payload && payload.role === 'admin');
+    const payload: any = await verify(token, secret, 'HS256');
+    if (!payload || payload.role !== 'admin' || payload.sub !== 'admin') return false;
+    if (typeof payload.ver === 'number' && storage.getAdminAuth) {
+      const record = await storage.getAdminAuth().catch(() => null);
+      if (record && typeof record.tokenVersion === 'number' && payload.ver !== record.tokenVersion) {
+        return false;
+      }
+    }
+    return true;
   } catch {
     return false;
   }
@@ -20,12 +27,13 @@ async function isCallerAdmin(c: any): Promise<boolean> {
 
 export function createNodesRoutes(storage: StorageAdapter, _cache: CacheAdapter) {
   const router = new Hono();
+  const requireAdmin = createRequireAdminMiddleware(storage);
 
   // Nodes List - ProbeToken is filtered for non-admin viewers to prevent leaks
   router.get('/api/nodes', async (c) => {
     try {
       const nodes = await storage.getNodes();
-      const isAdmin = await isCallerAdmin(c);
+      const isAdmin = await isCallerAdmin(c, storage);
       const sanitizedNodes = (nodes || []).map((node: ServerNode) => ({
         ...node,
         ip: '***.***.***.***',

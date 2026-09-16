@@ -203,7 +203,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsChangingPassword(true);
     try {
       const res = await changeAdminPassword(oldPassword, newPassword);
-      onShowToast('success', '密码修改成功', res.message || '管理员密码已成功更新并采用 SHA-256 加盐安全持久化。');
+      onShowToast('success', '密码修改成功', res.message || '管理员密码已成功更新至 D1 数据库并刷新安全会话。');
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');

@@ -310,7 +310,7 @@ export async function adminLogin(password: string): Promise<any> {
   if (!res.ok || !data.success) {
     const statusText = `HTTP ${res.status}`;
     const serverErr = data.error || (data.message ? `${data.error}: ${data.message}` : undefined);
-    const detailMsg = serverErr ? `[${statusText}] ${serverErr}` : `[${statusText}] 登录验证失败，请检查密码或 Cloudflare 变量`;
+    const detailMsg = serverErr ? `[${statusText}] ${serverErr}` : `[${statusText}] 登录验证失败，请检查密码是否正确`;
     throw new Error(detailMsg);
   }
   if (data.token) {

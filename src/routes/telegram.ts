@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { StorageAdapter, CacheAdapter, TelegramConfig, TelegramLog } from '../core/types';
-import { requireAdmin } from '../middleware/auth';
+import { createRequireAdminMiddleware } from '../middleware/auth';
 import { sendTelegramNotification, resolveTelegramBotToken } from '../adapters/notifications/TelegramNotifier';
 import { TelegramConfigSchema } from '../core/schemas';
 
 export function createTelegramRoutes(storage: StorageAdapter, _cache: CacheAdapter) {
   const router = new Hono();
+  const requireAdmin = createRequireAdminMiddleware(storage);
 
   // Telegram Config (Admin authenticated only, botToken retrieved exclusively from Cloudflare Secrets / Env)
   router.get('/api/telegram/config', requireAdmin, async (c) => {

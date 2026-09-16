@@ -1,18 +1,29 @@
 import { Hono } from 'hono';
 import { sign } from 'hono/jwt';
 import { StorageAdapter, CacheAdapter } from '../core/types';
-import { getJwtSecret, hashPassword, generateSalt, verifyPassword, requireAdmin } from '../middleware/auth';
-import { createRateLimiter } from '../middleware/rateLimit';
+import {
+  getJwtSecret,
+  hashPassword,
+  generateSalt,
+  verifyAndGetAdminAuth,
+  createRequireAdminMiddleware,
+} from '../middleware/auth';
+import { createRateLimiter, getClientIp } from '../middleware/rateLimit';
 import { AdminVerifySchema, ChangePasswordSchema } from '../core/schemas';
 
 export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
   const router = new Hono();
+  const requireAdminWithStorage = createRequireAdminMiddleware(storage);
 
-  // Rate limiter: 5 requests / min / IP for login verification
+  // Rate limiter: 5 requests / 60s per IP + username combo to block brute-force
   const loginLimiter = createRateLimiter(cache, {
     windowSeconds: 60,
     maxRequests: 5,
     keyPrefix: 'auth_login',
+    keyExtractor: (c) => {
+      const ip = getClientIp(c);
+      return `${ip}:admin`;
+    },
     errorMessage: '登录尝试过于频繁，已触发安全频率限制，请 1 分钟后再试。',
   });
 
@@ -34,38 +45,12 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
       }
 
       const { password } = parsed.data;
-      const cEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
-      const gThis: Record<string, any> = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
-      const pEnv: Record<string, any> = typeof process !== 'undefined' && process.env ? process.env : {};
+      const { valid, tokenVersion } = await verifyAndGetAdminAuth(password, storage, c);
 
-      // Multi-layer lookup: c.env (Hono) -> globalThis (Workers global) -> process.env
-      const envPassword =
-        cEnv.ADMIN_PASSWORD ||
-        cEnv.password ||
-        cEnv.ADMIN_PASS ||
-        cEnv.PASSWORD ||
-        gThis.ADMIN_PASSWORD ||
-        gThis.password ||
-        gThis.ADMIN_PASS ||
-        gThis.PASSWORD ||
-        pEnv.ADMIN_PASSWORD ||
-        pEnv.password ||
-        pEnv.ADMIN_PASS ||
-        pEnv.PASSWORD;
-
-      const hasEnv = !!(envPassword && typeof envPassword === 'string' && envPassword.trim().length > 0);
-      const isValid = await verifyPassword(password, storage, envPassword);
-      if (!isValid) {
-        // Collect visible keys (names only, no secret values) for troubleshooting
-        const visibleKeys = [
-          ...Object.keys(cEnv),
-          ...Object.keys(gThis).filter(k => k.toLowerCase().includes('pass') || k.toLowerCase().includes('jwt')),
-        ].filter(k => !k.startsWith('_'));
-
-        const errorDetail = !hasEnv
-          ? `Cloudflare 未读取到 ADMIN_PASSWORD (检测到的变量名: [${visibleKeys.join(', ')}])`
-          : '输入的密码与 Cloudflare 中配置的 Secret 密码不匹配（请核对密码大小写）';
-        return c.json({ success: false, error: errorDetail, hasEnvConfigured: hasEnv }, 401);
+      if (!valid) {
+        // Log internally for debugging, never leak environment or secret structure to client
+        console.warn(`[Admin Login Rejected] Failed password attempt from ${getClientIp(c)}`);
+        return c.json({ success: false, error: '认证失败，管理员密码不正确' }, 401);
       }
 
       let secret: string;
@@ -73,28 +58,57 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
         secret = getJwtSecret(c);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Unknown secret error';
+        console.error('[JWT Configuration Error]', message);
         return c.json(
           {
             success: false,
-            error: '系统安全错误: ' + message,
+            error: '系统安全错误: JWT_SECRET 未配置或长度不足 32 位',
           },
           500
         );
       }
 
-      const exp = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60; // 7 days
-      const token = await sign({ role: 'admin', exp }, secret, 'HS256');
+      // Secure JWT Payload: standard claims (sub, role, iat, exp, jti, ver)
+      // Access token expiration: 2 hours (7200s)
+      const now = Math.floor(Date.now() / 1000);
+      const exp = now + 2 * 60 * 60;
+      const jti = crypto.randomUUID();
 
-      return c.json({ success: true, token });
+      const token = await sign(
+        {
+          sub: 'admin',
+          role: 'admin',
+          iat: now,
+          exp,
+          jti,
+          ver: tokenVersion,
+        },
+        secret,
+        'HS256'
+      );
+
+      return c.json({ success: true, token, expiresIn: 7200 });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Internal Server Error';
-      return c.json({ success: false, error: message }, 500);
+      console.error('[Admin Login Exception]', err);
+      return c.json({ success: false, error: '服务器内部错误' }, 500);
     }
   });
 
-  // Admin Change Password Endpoint
-  router.post('/api/admin/change-password', requireAdmin, async (c) => {
+  // Admin Change Password Endpoint - requires valid admin session
+  router.post('/api/admin/change-password', requireAdminWithStorage, async (c) => {
     try {
+      // Must guarantee storage persistence is functional
+      if (!storage.saveAdminAuth || !storage.getAdminAuth) {
+        return c.json(
+          {
+            success: false,
+            error: '持久化存储引擎不可用，无法安全保存管理员凭证',
+          },
+          500
+        );
+      }
+
       const rawBody = await c.req.json().catch(() => ({}));
       const parsed = ChangePasswordSchema.safeParse(rawBody);
 
@@ -110,64 +124,69 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
       }
 
       const { oldPassword, newPassword } = parsed.data;
-      const runtimeEnv = (c.env || {}) as Record<string, unknown>;
-      const envPassword =
-        (runtimeEnv.ADMIN_PASSWORD as string | undefined) ||
-        (typeof process !== 'undefined' && process.env ? process.env.ADMIN_PASSWORD : undefined);
 
-      const isOldValid = await verifyPassword(oldPassword, storage, envPassword);
+      // 1. Verify old password strictly against D1 / initial secret
+      const { valid: isOldValid, tokenVersion: currentVersion } = await verifyAndGetAdminAuth(oldPassword, storage, c);
       if (!isOldValid) {
         return c.json({ success: false, error: '原密码输入不正确，请重新核对' }, 403);
       }
 
-      const salt = generateSalt();
-      const passwordHash = await hashPassword(newPassword, salt);
+      // 2. Generate new salt and compute PBKDF2 hash
+      const newSalt = generateSalt();
+      const newPasswordHash = await hashPassword(newPassword, newSalt);
       const nowIso = new Date().toISOString();
+      const nextTokenVersion = (currentVersion || 1) + 1;
 
-      if (storage.saveAdminAuth) {
-        await storage.saveAdminAuth({
-          passwordHash,
-          salt,
-          updatedAt: nowIso,
-        });
-      }
+      // 3. Persist new credentials and increment token_version in D1
+      await storage.saveAdminAuth({
+        passwordHash: newPasswordHash,
+        salt: newSalt,
+        updatedAt: nowIso,
+        tokenVersion: nextTokenVersion,
+      });
 
-      // Synchronize runtime secret in Cloudflare Worker environment & cache
-      if (c && c.env && typeof c.env === 'object') {
-        (c.env as Record<string, unknown>).ADMIN_PASSWORD = newPassword;
-      }
-      if (typeof process !== 'undefined' && process.env) {
-        process.env.ADMIN_PASSWORD = newPassword;
-      }
-      await cache.set('runtime_admin_secret', newPassword).catch(() => null);
+      // 4. Invalidate temporary caches
+      await cache.delete('runtime_admin_secret').catch(() => null);
 
       let secret: string;
       try {
         secret = getJwtSecret(c);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Unknown secret error';
-        return c.json(
-          {
-            success: false,
-            error: '系统安全错误: ' + message,
-          },
-          500
-        );
+        return c.json({ success: false, error: '系统安全错误: ' + message }, 500);
       }
 
-      const exp = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
-      const newToken = await sign({ role: 'admin', exp, updatedAt: nowIso }, secret, 'HS256');
+      // 5. Issue new JWT reflecting incremented tokenVersion (all old JWTs with previous version become instantly invalid)
+      const now = Math.floor(Date.now() / 1000);
+      const exp = now + 2 * 60 * 60;
+      const jti = crypto.randomUUID();
+
+      const newToken = await sign(
+        {
+          sub: 'admin',
+          role: 'admin',
+          iat: now,
+          exp,
+          jti,
+          ver: nextTokenVersion,
+        },
+        secret,
+        'HS256'
+      );
 
       return c.json({
         success: true,
-        message: '管理员凭证更新成功，已即时持久化到 D1 数据库并刷新安全会话',
+        message: '管理员密码已成功持久化至 D1 数据库，全部历史会话已自动失效并签发新凭证',
         token: newToken,
+        expiresIn: 7200,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Internal Server Error';
-      return c.json({ success: false, error: message }, 500);
+      console.error('[Change Password Exception]', err);
+      return c.json({ success: false, error: '修改密码失败: ' + message }, 500);
     }
   });
 
   return router;
 }
+

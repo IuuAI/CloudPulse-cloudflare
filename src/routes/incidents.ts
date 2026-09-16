@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { StorageAdapter, CacheAdapter, IncidentItem } from '../core/types';
-import { requireAdmin } from '../middleware/auth';
+import { createRequireAdminMiddleware } from '../middleware/auth';
 import { sendTelegramNotification, resolveTelegramBotToken } from '../adapters/notifications/TelegramNotifier';
 import { CreateIncidentSchema, AddIncidentUpdateSchema, ResolveIncidentSchema } from '../core/schemas';
 
 export function createIncidentsRoutes(storage: StorageAdapter, _cache: CacheAdapter) {
   const router = new Hono();
+  const requireAdmin = createRequireAdminMiddleware(storage);
 
   router.get('/api/incidents', async (c) => {
     try {

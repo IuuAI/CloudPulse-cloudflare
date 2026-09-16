@@ -156,6 +156,7 @@ export interface AdminAuthRecord {
   passwordHash: string;
   salt: string;
   updatedAt: string;
+  tokenVersion?: number;
 }
 
 export interface StorageAdapter {

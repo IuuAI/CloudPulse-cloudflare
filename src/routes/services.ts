@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { StorageAdapter, CacheAdapter, ServiceItem } from '../core/types';
-import { requireAdmin } from '../middleware/auth';
+import { createRequireAdminMiddleware } from '../middleware/auth';
 import { CreateServiceSchema, UpdateServiceSchema } from '../core/schemas';
 
 export function createServicesRoutes(storage: StorageAdapter, _cache: CacheAdapter) {
   const router = new Hono();
+  const requireAdmin = createRequireAdminMiddleware(storage);
 
   router.get('/api/services', async (c) => {
     try {
