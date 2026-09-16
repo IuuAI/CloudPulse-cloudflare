@@ -1,13 +1,13 @@
 import { Context, Next } from 'hono';
 import { verify } from 'hono/jwt';
-import { StorageAdapter, AdminAuthRecord } from '../core/types';
+import { StorageAdapter, AdminAuthRecord, AppEnv } from '../core/types';
 
 /**
  * Retrieve production JWT Secret strictly from environment variables.
  * Enforces minimum 32 characters entropy. Zero hardcoded defaults allowed in any environment.
  */
-export function getJwtSecret(c: Context): string {
-  const cEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
+export function getJwtSecret(c: Context<AppEnv> | Context): string {
+  const cEnv = (c && c.env && typeof c.env === 'object') ? (c.env as AppEnv['Bindings']) : {};
   const gThis = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
   const secret =
     cEnv.JWT_SECRET ||
@@ -99,7 +99,7 @@ export async function sha256Hex(str: string): Promise<string> {
 export async function verifyAndGetAdminAuth(
   password: string,
   storage: StorageAdapter,
-  c: Context
+  c: Context<AppEnv> | Context
 ): Promise<{ valid: boolean; tokenVersion: number }> {
   if (!password || typeof password !== 'string') {
     return { valid: false, tokenVersion: 1 };
@@ -142,8 +142,8 @@ export async function verifyAndGetAdminAuth(
     }
   }
 
-  // 2. D1 has no record yet -> Bootstrap from Cloudflare Secret: ADMIN_PASSWORD
-  const cEnv = (c && c.env && typeof c.env === 'object') ? (c.env as Record<string, any>) : {};
+  // 2. D1 has no record yet -> Bootstrap directly from Cloudflare Binding: c.env.ADMIN_PASSWORD
+  const cEnv = (c && c.env && typeof c.env === 'object') ? (c.env as AppEnv['Bindings']) : {};
   const gThis = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
   const envPassword =
     (typeof cEnv.ADMIN_PASSWORD === 'string' && cEnv.ADMIN_PASSWORD.trim()) ||

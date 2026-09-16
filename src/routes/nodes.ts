@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { StorageAdapter, CacheAdapter, ServerNode } from '../core/types';
+import { StorageAdapter, CacheAdapter, ServerNode, AppEnv } from '../core/types';
 import { createRequireAdminMiddleware, getJwtSecret } from '../middleware/auth';
 import { verify } from 'hono/jwt';
 import { CreateNodeSchema, UpdateNodeSchema } from '../core/schemas';
@@ -36,7 +36,7 @@ async function isCallerAdmin(c: any, storage: StorageAdapter): Promise<boolean> 
 }
 
 export function createNodesRoutes(storage: StorageAdapter, _cache: CacheAdapter) {
-  const router = new Hono();
+  const router = new Hono<AppEnv>();
   const requireAdmin = createRequireAdminMiddleware(storage);
 
   // Nodes List - ProbeToken is filtered for non-admin viewers to prevent leaks

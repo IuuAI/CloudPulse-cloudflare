@@ -6,7 +6,7 @@ import { MemoryStorageAdapter } from '../src/adapters/storage/MemoryStorageAdapt
 import { MemoryCacheAdapter } from '../src/adapters/cache/MemoryCacheAdapter';
 import { createApiRouter } from '../src/core/router';
 import { runMonitorCycle } from '../src/core/monitor';
-import { StorageAdapter, CacheAdapter } from '../src/core/types';
+import { StorageAdapter, CacheAdapter, AppEnv } from '../src/core/types';
 
 export type Bindings = {
   DB?: D1Database;
@@ -25,7 +25,7 @@ let cachedD1Binding: D1Database | null = null;
 let cachedKVBinding: KVNamespace | null = null;
 let cachedStorage: StorageAdapter | null = null;
 let cachedCache: CacheAdapter | null = null;
-let cachedApp: Hono | null = null;
+let cachedApp: Hono<AppEnv> | null = null;
 
 let isDbInitialized = false;
 let dbInitializationPromise: Promise<void> | null = null;
@@ -49,7 +49,7 @@ export function getRuntimeEnv(): Bindings | null {
 async function getOrInitWorkerContext(env: Bindings): Promise<{
   storage: StorageAdapter;
   cache: CacheAdapter;
-  app: Hono;
+  app: Hono<AppEnv>;
 }> {
   // 1. Cache raw D1 binding instance if available
   if (env.DB && !cachedD1Binding) {

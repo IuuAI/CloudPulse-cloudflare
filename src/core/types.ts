@@ -3,6 +3,24 @@ export type ServiceStatus = 'operational' | 'degraded' | 'down' | 'maintenance';
 export type IncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved';
 export type IncidentSeverity = 'critical' | 'major' | 'minor' | 'info';
 
+export interface WorkerBindings {
+  DB?: any;
+  CACHE?: any;
+  ADMIN_PASSWORD?: string;
+  JWT_SECRET?: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  GEMINI_API_KEY?: string;
+  ASSETS?: any;
+  [key: string]: any;
+}
+
+export interface AppEnv {
+  Bindings: WorkerBindings;
+  Variables: {
+    jwtPayload?: any;
+  };
+}
+
 export interface AppConfig {
   environment: 'development' | 'production' | 'test';
   telegramBotToken?: string;

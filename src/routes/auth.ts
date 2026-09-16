@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { sign } from 'hono/jwt';
-import { StorageAdapter, CacheAdapter } from '../core/types';
+import { StorageAdapter, CacheAdapter, AppEnv } from '../core/types';
 import {
   getJwtSecret,
   hashPassword,
@@ -12,7 +12,7 @@ import { createRateLimiter, getClientIp } from '../middleware/rateLimit';
 import { AdminVerifySchema, ChangePasswordSchema } from '../core/schemas';
 
 export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
-  const router = new Hono();
+  const router = new Hono<AppEnv>();
   const requireAdminWithStorage = createRequireAdminMiddleware(storage);
 
   // Rate limiter: 5 requests / 60s per IP + username combo to block brute-force

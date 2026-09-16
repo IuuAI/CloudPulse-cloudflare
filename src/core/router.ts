@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { StorageAdapter, CacheAdapter } from './types';
+import { StorageAdapter, CacheAdapter, AppEnv } from './types';
 import { createHealthRoutes } from '../routes/health';
 import { createOverviewRoutes } from '../routes/overview';
 import { createAuthRoutes } from '../routes/auth';
@@ -16,8 +16,8 @@ import { createSettingsRoutes } from '../routes/settings';
  * CloudPulse Core API Router (Modularized)
  * Composes dedicated route modules with secure authentication & storage adapters.
  */
-export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter): Hono {
-  const app = new Hono();
+export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
 
   // Guarantee env bindings are propagated to every subroute context
   app.use('*', async (c, next) => {
