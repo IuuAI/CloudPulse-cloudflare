@@ -117,7 +117,7 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    // 2. Dispatch all API requests to the consolidated modular Hono router
+    // 2. Dispatch all API requests to the consolidated modular Hono router with active env
     try {
       const { app } = await getOrInitWorkerContext(env);
       return app.fetch(request, env, ctx);
