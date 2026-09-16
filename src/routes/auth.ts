@@ -38,7 +38,9 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
       const envPassword =
         runtimeEnv.ADMIN_PASSWORD ||
         runtimeEnv.password ||
-        (typeof process !== 'undefined' && process.env ? (process.env.ADMIN_PASSWORD || process.env.password) : undefined);
+        runtimeEnv.ADMIN_PASS ||
+        runtimeEnv.PASSWORD ||
+        (typeof process !== 'undefined' && process.env ? (process.env.ADMIN_PASSWORD || process.env.password || process.env.ADMIN_PASS || process.env.PASSWORD) : undefined);
 
       const isValid = await verifyPassword(password, storage, envPassword);
       if (!isValid) {
