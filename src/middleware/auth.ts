@@ -8,8 +8,10 @@ import { StorageAdapter, AdminAuthRecord } from '../core/types';
  */
 export function getJwtSecret(c: Context): string {
   const cEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
+  const gThis = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
   const secret =
     cEnv.JWT_SECRET ||
+    gThis.JWT_SECRET ||
     (typeof process !== 'undefined' && process.env ? process.env.JWT_SECRET : undefined);
 
   if (!secret || typeof secret !== 'string' || secret.trim().length < 32) {
@@ -142,8 +144,10 @@ export async function verifyAndGetAdminAuth(
 
   // 2. D1 has no record yet -> Bootstrap from Cloudflare Secret: ADMIN_PASSWORD
   const cEnv = (c && c.env && typeof c.env === 'object') ? (c.env as Record<string, any>) : {};
+  const gThis = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
   const envPassword =
     (typeof cEnv.ADMIN_PASSWORD === 'string' && cEnv.ADMIN_PASSWORD.trim()) ||
+    (typeof gThis.ADMIN_PASSWORD === 'string' && gThis.ADMIN_PASSWORD.trim()) ||
     (typeof process !== 'undefined' && process.env?.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.trim() : '');
 
   if (envPassword) {

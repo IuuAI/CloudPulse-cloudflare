@@ -19,6 +19,19 @@ import { createSettingsRoutes } from '../routes/settings';
 export function createApiRouter(storage: StorageAdapter, cache: CacheAdapter): Hono {
   const app = new Hono();
 
+  // Guarantee env bindings are propagated to every subroute context
+  app.use('*', async (c, next) => {
+    if (!c.env || Object.keys(c.env).length === 0) {
+      // Fallback to active worker global env if c.env is empty
+      const { getRuntimeEnv } = await import('../../worker/index').catch(() => ({ getRuntimeEnv: () => null }));
+      const activeEnv = getRuntimeEnv();
+      if (activeEnv) {
+        (c as any).env = activeEnv;
+      }
+    }
+    await next();
+  });
+
   // Dynamic Strict CORS Configuration
   app.use(
     '/api/*',

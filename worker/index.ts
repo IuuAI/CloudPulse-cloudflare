@@ -118,6 +118,10 @@ async function getOrInitWorkerContext(env: Bindings): Promise<{
 export default {
   fetch: async (request: Request, env: Bindings, ctx: ExecutionContext) => {
     currentGlobalEnv = env;
+    if (typeof globalThis !== 'undefined' && env) {
+      if (env.ADMIN_PASSWORD) (globalThis as any).ADMIN_PASSWORD = env.ADMIN_PASSWORD;
+      if (env.JWT_SECRET) (globalThis as any).JWT_SECRET = env.JWT_SECRET;
+    }
     const url = new URL(request.url);
 
     // 1. Serve frontend SPA assets when not an /api route and ASSETS binding is present
