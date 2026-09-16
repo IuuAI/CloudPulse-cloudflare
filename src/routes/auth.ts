@@ -68,7 +68,7 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
         );
       }
 
-      // Secure JWT Payload: standard claims (sub, role, iat, exp, jti, ver)
+      // Secure JWT Payload: standard claims (iss, sub, role, iat, exp, jti, ver)
       // Access token expiration: 2 hours (7200s)
       const now = Math.floor(Date.now() / 1000);
       const exp = now + 2 * 60 * 60;
@@ -76,6 +76,7 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
 
       const token = await sign(
         {
+          iss: 'cloudpulse',
           sub: 'admin',
           role: 'admin',
           iat: now,
@@ -163,6 +164,7 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
 
       const newToken = await sign(
         {
+          iss: 'cloudpulse',
           sub: 'admin',
           role: 'admin',
           iat: now,

@@ -4,7 +4,7 @@ import { StorageAdapter, AdminAuthRecord } from '../core/types';
 
 /**
  * Retrieve production JWT Secret strictly from environment variables.
- * Enforces minimum 32 characters entropy. Zero hardcoded defaults allowed in production.
+ * Enforces minimum 32 characters entropy. Zero hardcoded defaults allowed in any environment.
  */
 export function getJwtSecret(c: Context): string {
   const cEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
@@ -164,10 +164,13 @@ export async function verifyAndGetAdminAuth(
     return { valid: false, tokenVersion: 1 };
   }
 
-  // 3. Local dev / test environment fallback
-  const isProd = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
-  if (!isProd && password.trim() === 'admin123') {
-    return { valid: true, tokenVersion: 1 };
+  // 3. Local dev / test environment fallback: only if DEV_ADMIN_PASSWORD is explicitly defined
+  const isDev = typeof process !== 'undefined' && process.env?.NODE_ENV === 'development';
+  const devPassword = typeof process !== 'undefined' ? process.env?.DEV_ADMIN_PASSWORD : undefined;
+  if (isDev && devPassword && devPassword.trim().length > 0) {
+    if (timingSafeEqual(password.trim(), devPassword.trim())) {
+      return { valid: true, tokenVersion: 1 };
+    }
   }
 
   return { valid: false, tokenVersion: 1 };
@@ -189,7 +192,7 @@ export async function verifyPassword(
 
 /**
  * Factory for requireAdmin middleware with storage binding.
- * Verifies JWT signature, role, sub, expiration, and checks tokenVersion against D1
+ * Verifies JWT signature, role, sub, iss, expiration, and checks tokenVersion against D1
  * to immediately invalidate previous sessions upon password reset.
  */
 export function createRequireAdminMiddleware(storage: StorageAdapter) {
@@ -208,7 +211,19 @@ export function createRequireAdminMiddleware(storage: StorageAdapter) {
       const secret = getJwtSecret(c);
       const payload: any = await verify(token, secret, 'HS256');
 
-      if (!payload || payload.role !== 'admin' || payload.sub !== 'admin') {
+      if (!payload) {
+        return c.json({ error: 'Unauthorized: Invalid token' }, 401);
+      }
+
+      // Check essential claims: role, sub, iss, exp
+      const now = Math.floor(Date.now() / 1000);
+      if (
+        payload.role !== 'admin' ||
+        payload.sub !== 'admin' ||
+        (payload.iss && payload.iss !== 'cloudpulse') ||
+        typeof payload.exp !== 'number' ||
+        payload.exp <= now
+      ) {
         return c.json({ error: 'Forbidden: Insufficient administrative privileges' }, 403);
       }
 
@@ -226,8 +241,9 @@ export function createRequireAdminMiddleware(storage: StorageAdapter) {
       c.set('jwtPayload', payload);
       return await next();
     } catch (err: any) {
+      console.warn('[JWT Auth Middleware Error]', err?.message || 'Verification failed');
       return c.json({
-        error: 'Unauthorized: Token expired, invalid or revoked',
+        error: 'Unauthorized: Invalid or expired token',
       }, 401);
     }
   };
@@ -246,13 +262,22 @@ export async function requireAdmin(c: Context, next: Next) {
   try {
     const secret = getJwtSecret(c);
     const payload: any = await verify(token, secret, 'HS256');
-    if (!payload || payload.role !== 'admin' || payload.sub !== 'admin') {
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !payload ||
+      payload.role !== 'admin' ||
+      payload.sub !== 'admin' ||
+      (payload.iss && payload.iss !== 'cloudpulse') ||
+      typeof payload.exp !== 'number' ||
+      payload.exp <= now
+    ) {
       return c.json({ error: 'Forbidden: Insufficient administrative privileges' }, 403);
     }
     c.set('jwtPayload', payload);
     return await next();
   } catch (err: any) {
-    return c.json({ error: 'Unauthorized: Token expired or invalid' }, 401);
+    console.warn('[JWT Auth Middleware Error]', err?.message || 'Verification failed');
+    return c.json({ error: 'Unauthorized: Invalid or expired token' }, 401);
   }
 }
 

@@ -12,7 +12,17 @@ async function isCallerAdmin(c: any, storage: StorageAdapter): Promise<boolean> 
   try {
     const secret = getJwtSecret(c);
     const payload: any = await verify(token, secret, 'HS256');
-    if (!payload || payload.role !== 'admin' || payload.sub !== 'admin') return false;
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !payload ||
+      payload.role !== 'admin' ||
+      payload.sub !== 'admin' ||
+      (payload.iss && payload.iss !== 'cloudpulse') ||
+      typeof payload.exp !== 'number' ||
+      payload.exp <= now
+    ) {
+      return false;
+    }
     if (typeof payload.ver === 'number' && storage.getAdminAuth) {
       const record = await storage.getAdminAuth().catch(() => null);
       if (record && typeof record.tokenVersion === 'number' && payload.ver !== record.tokenVersion) {
