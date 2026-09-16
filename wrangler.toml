@@ -21,12 +21,4 @@ id = "1343621be8b64badb66b8ad1f35dea7a"
 [triggers]
 crons = ["*/20 * * * *"]
 
-# 4. 环境变量与安全密钥声明 (Cloudflare Workers Secrets)
-# 注意：ADMIN_PASSWORD 与 JWT_SECRET 属于机密信息，请勿在配置文件中明文填写！
-# 生产环境请在 Cloudflare 控制台 (Workers -> Settings -> Variables and Secrets)
-# 或在本地通过 CLI 注入：
-#   npx wrangler secret put ADMIN_PASSWORD
-#   npx wrangler secret put JWT_SECRET
-# 本地开发测试请复制 .dev.vars.example 为 .dev.vars 进行配置
-
 
