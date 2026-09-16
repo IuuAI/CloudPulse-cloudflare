@@ -42,9 +42,13 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
         runtimeEnv.PASSWORD ||
         (typeof process !== 'undefined' && process.env ? (process.env.ADMIN_PASSWORD || process.env.password || process.env.ADMIN_PASS || process.env.PASSWORD) : undefined);
 
+      const hasEnv = !!(envPassword && typeof envPassword === 'string' && envPassword.trim().length > 0);
       const isValid = await verifyPassword(password, storage, envPassword);
       if (!isValid) {
-        return c.json({ success: false, error: '密码错误或管理员 Secret 未在 Cloudflare 配置' }, 401);
+        const errorDetail = !hasEnv
+          ? 'Cloudflare 未读取到 ADMIN_PASSWORD 密钥变量（请检查变量名或运行 wrangler deploy 重新绑定）'
+          : '输入的密码与 Cloudflare 中配置的 Secret 密码不匹配（请检查大小写或拼写）';
+        return c.json({ success: false, error: errorDetail, hasEnvConfigured: hasEnv }, 401);
       }
 
       let secret: string;
