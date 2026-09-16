@@ -57,38 +57,22 @@ export async function sha256Hex(str: string): Promise<string> {
  */
 export async function verifyPassword(
   password: string,
-  storage: StorageAdapter,
+  _storage: StorageAdapter,
   envFallbackPassword?: string
 ): Promise<boolean> {
   if (!password || typeof password !== 'string') return false;
 
-  const cleanEnvPass =
-    (envFallbackPassword && typeof envFallbackPassword === 'string' && envFallbackPassword.trim().length > 0)
-      ? envFallbackPassword.trim()
-      : 'admin123';
+  const isProduction = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production';
+  const cleanEnvPass = (envFallbackPassword && typeof envFallbackPassword === 'string' && envFallbackPassword.trim().length > 0)
+    ? envFallbackPassword.trim()
+    : (isProduction ? undefined : 'admin123');
 
-  // 1. Check D1 / Persistent Storage admin credentials if record exists
-  if (storage.getAdminAuth) {
-    try {
-      const adminAuth = await storage.getAdminAuth();
-      if (adminAuth && adminAuth.passwordHash && adminAuth.salt) {
-        const computedHash = await hashPassword(password.trim(), adminAuth.salt);
-        if (computedHash === adminAuth.passwordHash) {
-          return true;
-        }
-      }
-    } catch {
-      // Fall through to env fallback if DB query errors out
-    }
+  // If in production and no ADMIN_PASSWORD secret is configured, reject authentication
+  if (!cleanEnvPass) {
+    return false;
   }
 
-  // 2. Check explicit runtime environment secret if configured
-  if (cleanEnvPass && cleanEnvPass.length > 0) {
-    return password.trim() === cleanEnvPass;
-  }
-
-  // 3. If neither database credentials nor env secret match, reject authentication
-  return false;
+  return password.trim() === cleanEnvPass;
 }
 
 /**
