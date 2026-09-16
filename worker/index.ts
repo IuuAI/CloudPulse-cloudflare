@@ -7,6 +7,7 @@ import { MemoryCacheAdapter } from '../src/adapters/cache/MemoryCacheAdapter';
 import { createApiRouter } from '../src/core/router';
 import { runMonitorCycle } from '../src/core/monitor';
 import { StorageAdapter, CacheAdapter, AppEnv } from '../src/core/types';
+import { hashPassword, generateSalt } from '../src/middleware/auth';
 
 export type Bindings = {
   DB?: D1Database;
@@ -95,6 +96,26 @@ async function getOrInitWorkerContext(env: Bindings): Promise<{
           isDbInitialized = true;
           poolInitializedAt = new Date().toISOString();
           console.log('[Cloudflare Worker] D1 single connection pool and schema initialized at:', poolInitializedAt);
+
+          // Bootstrap admin credentials into D1 if admin_auth table is currently empty
+          if (env.ADMIN_PASSWORD && env.ADMIN_PASSWORD.trim()) {
+            try {
+              const existingAuth = await cachedStorage.getAdminAuth?.();
+              if (!existingAuth || !existingAuth.passwordHash) {
+                const salt = generateSalt();
+                const passwordHash = await hashPassword(env.ADMIN_PASSWORD.trim(), salt);
+                await cachedStorage.saveAdminAuth?.({
+                  passwordHash,
+                  salt,
+                  updatedAt: new Date().toISOString(),
+                  tokenVersion: 1,
+                });
+                console.log('[Cloudflare Worker Bootstrap] Pre-populated admin_auth into D1 successfully.');
+              }
+            } catch (authInitErr) {
+              console.warn('[Cloudflare Worker Bootstrap] Notice on admin auth seeding:', authInitErr);
+            }
+          }
         } catch (err) {
           console.error('[Cloudflare Worker Cold-Start] D1 connection pool initialization warning:', err);
           dbInitializationPromise = null;

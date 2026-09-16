@@ -21,3 +21,9 @@ id = "1343621be8b64badb66b8ad1f35dea7a"
 [triggers]
 crons = ["*/20 * * * *"]
 
+# 4. 环境变量与安全密钥 (Cloudflare Workers Variables)
+[vars]
+ADMIN_PASSWORD = "Ping669901.com"
+JWT_SECRET = "cloudpulse-jwt-super-secret-key-32chars-entropy"
+
+
