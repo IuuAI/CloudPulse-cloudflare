@@ -34,20 +34,37 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
       }
 
       const { password } = parsed.data;
-      const runtimeEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
+      const cEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
+      const gThis: Record<string, any> = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
+      const pEnv: Record<string, any> = typeof process !== 'undefined' && process.env ? process.env : {};
+
+      // Multi-layer lookup: c.env (Hono) -> globalThis (Workers global) -> process.env
       const envPassword =
-        runtimeEnv.ADMIN_PASSWORD ||
-        runtimeEnv.password ||
-        runtimeEnv.ADMIN_PASS ||
-        runtimeEnv.PASSWORD ||
-        (typeof process !== 'undefined' && process.env ? (process.env.ADMIN_PASSWORD || process.env.password || process.env.ADMIN_PASS || process.env.PASSWORD) : undefined);
+        cEnv.ADMIN_PASSWORD ||
+        cEnv.password ||
+        cEnv.ADMIN_PASS ||
+        cEnv.PASSWORD ||
+        gThis.ADMIN_PASSWORD ||
+        gThis.password ||
+        gThis.ADMIN_PASS ||
+        gThis.PASSWORD ||
+        pEnv.ADMIN_PASSWORD ||
+        pEnv.password ||
+        pEnv.ADMIN_PASS ||
+        pEnv.PASSWORD;
 
       const hasEnv = !!(envPassword && typeof envPassword === 'string' && envPassword.trim().length > 0);
       const isValid = await verifyPassword(password, storage, envPassword);
       if (!isValid) {
+        // Collect visible keys (names only, no secret values) for troubleshooting
+        const visibleKeys = [
+          ...Object.keys(cEnv),
+          ...Object.keys(gThis).filter(k => k.toLowerCase().includes('pass') || k.toLowerCase().includes('jwt')),
+        ].filter(k => !k.startsWith('_'));
+
         const errorDetail = !hasEnv
-          ? 'Cloudflare 未读取到 ADMIN_PASSWORD 密钥变量（请检查变量名或运行 wrangler deploy 重新绑定）'
-          : '输入的密码与 Cloudflare 中配置的 Secret 密码不匹配（请检查大小写或拼写）';
+          ? `Cloudflare 未读取到 ADMIN_PASSWORD (检测到的变量名: [${visibleKeys.join(', ')}])`
+          : '输入的密码与 Cloudflare 中配置的 Secret 密码不匹配（请核对密码大小写）';
         return c.json({ success: false, error: errorDetail, hasEnvConfigured: hasEnv }, 401);
       }
 

@@ -35,6 +35,13 @@ let poolInitializedAt: string | null = null;
 const memoryStorage = new MemoryStorageAdapter();
 const memoryCache = new MemoryCacheAdapter();
 
+// Global runtime env reference to ensure variable visibility across isolates
+let currentGlobalEnv: Bindings | null = null;
+
+export function getRuntimeEnv(): Bindings | null {
+  return currentGlobalEnv;
+}
+
 /**
  * Singleton factory for D1 and KV bindings, storage/cache adapters, and router instances.
  * Guarantees one-time D1 connection pool and schema initialization on Worker startup / cold-start.
@@ -110,6 +117,7 @@ async function getOrInitWorkerContext(env: Bindings): Promise<{
 
 export default {
   fetch: async (request: Request, env: Bindings, ctx: ExecutionContext) => {
+    currentGlobalEnv = env;
     const url = new URL(request.url);
 
     // 1. Serve frontend SPA assets when not an /api route and ASSETS binding is present

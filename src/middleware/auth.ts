@@ -7,10 +7,17 @@ import { StorageAdapter } from '../core/types';
  * Enforces minimum 32 characters entropy. Zero hardcoded defaults allowed in production.
  */
 export function getJwtSecret(c: Context): string {
-  const runtimeEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
+  const cEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
+  const gThis: Record<string, any> = typeof globalThis !== 'undefined' ? (globalThis as any) : {};
+  const pEnv: Record<string, any> = typeof process !== 'undefined' && process.env ? process.env : {};
+
   const secret =
-    runtimeEnv.JWT_SECRET ||
-    (typeof process !== 'undefined' && process.env ? process.env.JWT_SECRET : undefined) ||
+    cEnv.JWT_SECRET ||
+    cEnv.jwt_secret ||
+    gThis.JWT_SECRET ||
+    gThis.jwt_secret ||
+    pEnv.JWT_SECRET ||
+    pEnv.jwt_secret ||
     'cloudpulse-default-jwt-secret-key-2026-development-entropy';
 
   if (!secret || typeof secret !== 'string' || secret.trim().length < 32) {
