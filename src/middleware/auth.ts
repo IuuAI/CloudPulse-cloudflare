@@ -62,17 +62,21 @@ export async function verifyPassword(
 ): Promise<boolean> {
   if (!password || typeof password !== 'string') return false;
 
-  const isProduction = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production';
-  const cleanEnvPass = (envFallbackPassword && typeof envFallbackPassword === 'string' && envFallbackPassword.trim().length > 0)
-    ? envFallbackPassword.trim()
-    : (isProduction ? undefined : 'admin123');
+  const hasExplicitEnv = envFallbackPassword && typeof envFallbackPassword === 'string' && envFallbackPassword.trim().length > 0;
+  const isNodeProduction = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production';
+  
+  // If explicitly configured, use the provided environment password
+  if (hasExplicitEnv) {
+    return password.trim() === envFallbackPassword!.trim();
+  }
 
-  // If in production and no ADMIN_PASSWORD secret is configured, reject authentication
-  if (!cleanEnvPass) {
+  // If in Node.js production mode without explicitly set password, block default login for safety
+  if (isNodeProduction) {
     return false;
   }
 
-  return password.trim() === cleanEnvPass;
+  // Fallback for local preview / dev environment
+  return password.trim() === 'admin123';
 }
 
 /**

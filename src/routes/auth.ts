@@ -34,10 +34,11 @@ export function createAuthRoutes(storage: StorageAdapter, cache: CacheAdapter) {
       }
 
       const { password } = parsed.data;
-      const runtimeEnv = (c.env || {}) as Record<string, unknown>;
+      const runtimeEnv: Record<string, any> = (c && c.env && typeof c.env === 'object') ? c.env : {};
       const envPassword =
-        (runtimeEnv.ADMIN_PASSWORD as string | undefined) ||
-        (typeof process !== 'undefined' && process.env ? process.env.ADMIN_PASSWORD : undefined);
+        runtimeEnv.ADMIN_PASSWORD ||
+        runtimeEnv.password ||
+        (typeof process !== 'undefined' && process.env ? (process.env.ADMIN_PASSWORD || process.env.password) : undefined);
 
       const isValid = await verifyPassword(password, storage, envPassword);
       if (!isValid) {
