@@ -10,12 +10,12 @@ assets = { directory = "./dist" }
 [[d1_databases]]
 binding = "DB"
 database_name = "cloudpulse-d1"
-database_id = "REPLACE_ME"
+database_id = "0d30d27f-01db-4c20-b23f-d6940677675c"
 
 # 2. 边缘高速缓存绑定 (KV)
 [[kv_namespaces]]
 binding = "CACHE"
-id = "REPLACE_ME"
+id = "1343621be8b64badb66b8ad1f35dea7a"
 
 # 3. 每 5 分钟定时巡检探活与告警 Cron Trigger
 [triggers]
